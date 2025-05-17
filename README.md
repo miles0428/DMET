@@ -1,1 +1,1 @@
-# DMET-Hubbard
+# dmet

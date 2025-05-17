@@ -170,11 +170,9 @@ def main():
     L = 5
     t = 1.0
     number_of_electrons = 4
-
     hubbard_model = OneBodyHubbard(L, t)
     E_ground, wavefunction = hubbard_model.getAnalyticSolution(number_of_electrons)
     density_matrix = hubbard_model.getDensityMatrix(number_of_electrons)
-
     print("Ground state energy:", E_ground)
     print("Wavefunction shape:", wavefunction.shape)
     print("Density matrix:", density_matrix.trace())
