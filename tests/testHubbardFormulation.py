@@ -7,11 +7,3 @@ if __name__ == "__main__":
 
     print(one_body_hubbard.H)
     density_matrix = one_body_hubbard.get_density_matrix(number_of_electrons=2)
-
-    
-    
-    
-    
-
-    
-
