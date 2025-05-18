@@ -30,20 +30,10 @@ problemsolver = EigenSolver()
 
 DMET_instance = DMET(hubbard_problem,fragments=fragments,problem_solver=problemsolver,verbose=True)
 projectors = DMET_instance.get_projectors()
-for i,p in enumerate(projectors):
-    print(f"Fragment {i} Projector:")
-    # use hotmap to print the projector matrix
-    plt.imshow(np.abs(p), cmap='hot', interpolation='nearest')
-    plt.colorbar()
-    plt.title(f"Fragment {i} Projector")
-    plt.savefig(f"a/fragment_{i}_projector.png")
-    plt.clf()
+
     
 fhs=DMET_instance.get_fragment_hamiltonians()
 
-# for i,o in enumerate(fhs):
-#     print(f"Fragment {i} Hamiltonian:")
-#     print(o)
-#     break
+
 
     
