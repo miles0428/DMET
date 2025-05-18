@@ -8,15 +8,10 @@ DMET (Density Matrix Embedding Theory) is a quantum embedding method for solving
 1. Clone the repository:
    ```bash
    git clone https://github.com/your-repo/DMET-Hubbard.git
-   cd DMET-Hubbard
+   cd DMET
    ```
 
-2. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Install the package:
+2. Install the package:
    ```bash
    python setup.py install
    ```
