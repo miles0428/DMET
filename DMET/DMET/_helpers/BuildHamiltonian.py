@@ -6,12 +6,21 @@ def build_hamiltonian_from_one_two_body(h1_emb: np.ndarray, h2_emb: np.ndarray, 
     Construct a FermionOperator Hamiltonian from embedded one-body and two-body integrals.
 
     Args:
-        h1_emb (np.ndarray): Embedded one-body integrals, shape (n_emb, n_emb)
-        h2_emb (np.ndarray): Embedded two-body integrals, shape (n_emb, n_emb, n_emb, n_emb)
-        threshold (float): Cutoff below which coefficients are ignored
+        h1_emb (np.ndarray): Embedded one-body integrals, shape (n_emb, n_emb).
+        h2_emb (np.ndarray): Embedded two-body integrals, shape (n_emb, n_emb, n_emb, n_emb).
+        threshold (float): Cutoff below which coefficients are ignored.
 
     Returns:
-        FermionOperator: The second-quantized Hamiltonian constructed from the inputs
+        FermionOperator: The second-quantized Hamiltonian constructed from the inputs.
+
+    Main Concept:
+        Constructs a Hamiltonian in the second-quantized form using the provided one-body and two-body integrals.
+
+    Math Detail:
+        The Hamiltonian is constructed as:
+            H = \sum_{pq} h1_emb[p, q] c_p^\dagger c_q
+                + 0.5 * \sum_{pqrs} h2_emb[p, q, r, s] c_p^\dagger c_q^\dagger c_s c_r
+        where c_p^\dagger and c_q are creation and annihilation operators.
     """
     n_emb = h1_emb.shape[0]
     h_frag = FermionOperator()

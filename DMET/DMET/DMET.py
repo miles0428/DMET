@@ -24,11 +24,11 @@ class DMET:
         Args:
             problem_formulation (ProblemFormulation): The problem formulation containing one-body and many-body terms.
             fragments (List[np.ndarray]): A list of arrays, where each array contains indices of a fragment.
-            problem_solver: An instance of a solver class to solve the fragment Hamiltonians.
-            **kwargs: Additional optional parameters, such as 'bath_threshold'.
+            problem_solver (ProblemSolver): An instance of a solver class to solve the fragment Hamiltonians.
+            **kwargs: Additional optional parameters, such as 'bath_threshold', 'verbose', and 'number_of_bath_orbitals'.
 
-        Output:
-            None
+        Raises:
+            ValueError: If not all lattice sites are included in the fragments.
 
         Main Concept:
             This initializes the DMET object, setting up the problem formulation, fragments, and solver.
@@ -46,14 +46,14 @@ class DMET:
         if not self.is_all_lattice_sites_in_fragment(fragments):
             raise ValueError("Not all lattice sites are included in the fragment.")
         
-    def get_projectors(self,reorder_idxs: Union[np.ndarray, None] = None):
+    def get_projectors(self, reorder_idxs: Union[np.ndarray, None] = None):
         """
         Generate the projection operators for each fragment.
 
         Args:
-            None
+            reorder_idxs (Union[np.ndarray, None], optional): Reordering indices for the orbitals. Defaults to None.
 
-        Output:
+        Returns:
             List[np.ndarray]: A list of projector matrices, one for each fragment.
 
         Main Concept:
@@ -83,7 +83,7 @@ class DMET:
             mu (float): The chemical potential.
             fragment (np.ndarray): The indices of the fragment.
 
-        Output:
+        Returns:
             FermionOperator: The Hamiltonian with the chemical potential term added.
 
         Main Concept:
@@ -104,10 +104,7 @@ class DMET:
         """
         Construct the effective Hamiltonians for all fragments.
 
-        Args:
-            None
-
-        Output:
+        Returns:
             List[FragmentHamiltonian]: A list of embedded Hamiltonians for each fragment.
 
         Main Concept:
@@ -161,7 +158,7 @@ class DMET:
             float: The energy of the fragment.
 
         Math:
-            E = Tr(h * γ) + 0.5 * ∑ H_{ijkl} * Γ_{ijkl}
+            E = Tr(h * \gamma) + 0.5 * \sum H_{ijkl} * \Gamma_{ijkl}
         """
         idx = list(range(fragment_length))
         print(idx)
@@ -187,8 +184,10 @@ class DMET:
         Args:
             fragment_hamiltonian (FragmentHamiltonian): The embedded Hamiltonian for the fragment.
             multiplier_hamiltonian (FermionOperator): The Hamiltonian with the chemical potential term.
+            number_of_orbitals (Union[int, None], optional): The number of orbitals in the fragment. Defaults to None.
+            fragment_length (Union[int, None], optional): The length of the fragment. Defaults to None.
 
-        Output:
+        Returns:
             Tuple[float, np.ndarray, np.ndarray]:
                 - Fragment energy (float)
                 - One-body reduced density matrix (np.ndarray)
@@ -215,7 +214,7 @@ class DMET:
         Args:
             mu (float): The chemical potential.
 
-        Output:
+        Returns:
             Tuple[float, float]:
                 - Total energy (float)
                 - Number of electrons (float)
@@ -256,14 +255,15 @@ class DMET:
         # number_of_electrons = 3
         return total_energy, number_of_electrons
 
-    def run(self,mu0: float = None, mu1: float = None):
+    def run(self, mu0: float = None, mu1: float = None):
         """
         Perform a self-consistent DMET calculation to find the chemical potential.
 
         Args:
-            None
+            mu0 (float, optional): Initial guess for the chemical potential. Defaults to None.
+            mu1 (float, optional): Second guess for the chemical potential. Defaults to None.
 
-        Output:
+        Returns:
             float: The total energy after convergence.
 
         Main Concept:
@@ -301,7 +301,7 @@ class DMET:
         Args:
             mu (float): The chemical potential.
 
-        Output:
+        Returns:
             float: The difference between the DMET and one-body electron counts.
 
         Main Concept:
@@ -321,9 +321,9 @@ class DMET:
         Check if all lattice sites are included in the fragment.
 
         Args:
-            fragment (np.ndarray): The indices of the fragment.
+            fragments (np.ndarray): The indices of the fragments.
 
-        Output:
+        Returns:
             bool: True if all lattice sites are in the fragment, False otherwise.
 
         Main Concept:

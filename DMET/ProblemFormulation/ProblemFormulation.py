@@ -3,10 +3,22 @@ from abc import ABC, abstractmethod
 import typing
 
 class ProblemFormulation(ABC):
-    def __init__(self):
-        self.one_body_problem_formulation: typing.Optional[OneBodyProblemFormulation] = None
-        self.many_body_problem_formulation: typing.Optional[ManyBodyProblemFormulation] = None
+    def __init__(self, one_body_problem_formulation, many_body_problem_formulation):
+        """
+        Initialize the problem formulation with one-body and many-body formulations.
 
+        Args:
+            one_body_problem_formulation (OneBodyProblemFormulation): The one-body problem formulation.
+            many_body_problem_formulation (ManyBodyProblemFormulation): The many-body problem formulation.
+
+        Attributes:
+            one_body_problem_formulation (OneBodyProblemFormulation): Stores the one-body problem formulation.
+            many_body_problem_formulation (ManyBodyProblemFormulation): Stores the many-body problem formulation.
+        """
+        self.one_body_problem_formulation: typing.Optional[OneBodyProblemFormulation] = one_body_problem_formulation
+        self.many_body_problem_formulation: typing.Optional[ManyBodyProblemFormulation] = many_body_problem_formulation
+
+ 
 class OneBodyProblemFormulation(ABC):
     def __init__(self):
         self.H = None

@@ -21,6 +21,14 @@ class EigenSolver(ProblemSolver):
 
         Returns:
             tuple: (energy, one-body density matrix, two-body density matrix)
+
+        Main Concept:
+            Solves the eigenvalue problem for the Hamiltonian to find the ground state energy and density matrices.
+
+        Math Detail:
+            The eigenvalue problem is solved as:
+                H \psi = E \psi
+            The density matrices are computed from the ground state wavefunction \psi.
         """
         hamiltonian_sparse = self._transform_hamiltonian_to_matrix(hamiltonian, number_of_orbitals)
         energy, eigenstate = get_ground_state(hamiltonian_sparse, **kwargs)
@@ -40,6 +48,9 @@ class EigenSolver(ProblemSolver):
 
         Returns:
             csc_array: Sparse matrix representation of the Hamiltonian.
+
+        Main Concept:
+            Transforms the second-quantized Hamiltonian into a sparse matrix representation for numerical calculations.
         """
         return get_sparse_operator(hamiltonian, n_qubits=number_of_orbitals)
 
@@ -53,6 +64,11 @@ class EigenSolver(ProblemSolver):
 
         Returns:
             ndarray: 1-RDM of shape (n, n)
+
+        Main Concept:
+            The one-body density matrix is computed as:
+                \gamma_{pq} = <\psi| c_p^\dagger c_q |\psi>
+            where c_p^\dagger and c_q are creation and annihilation operators.
         """
         rdm1 = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
         for p in range(number_of_orbitals):
@@ -72,6 +88,11 @@ class EigenSolver(ProblemSolver):
 
         Returns:
             ndarray: 2-RDM of shape (n, n, n, n)
+
+        Main Concept:
+            The two-body density matrix is computed as:
+                \Gamma_{pqrs} = <\psi| c_p^\dagger c_q^\dagger c_s c_r |\psi>
+            where c_p^\dagger, c_q^\dagger, c_s, and c_r are creation and annihilation operators.
         """
         rdm2 = np.zeros((number_of_orbitals, number_of_orbitals,
                          number_of_orbitals, number_of_orbitals), dtype=np.complex128)

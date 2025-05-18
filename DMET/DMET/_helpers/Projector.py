@@ -59,17 +59,22 @@ import sparse
 
 def get_projector_reorder_idxs(fragments: list, rdm_length : int) -> list:
     """
-     Get the reorder indices for the projector matrix.
-     Parameters
-     ----------
-     fragments : list of (n_f,) ndarray of ints
-         The indices of the fragment orbitals (0-based).
-     rdm_length : int
-         The length of the RDM.
-     Returns
-     -------
-     reorder_idxs : list of (M,) ndarray of ints
-         The reorder indices for the projector matrix.
+     Generate reordering indices for the orbitals based on the fragments.
+
+     Args:
+         fragments (List[np.ndarray]): A list of fragments.
+         num_orbitals (int): The total number of orbitals in the system.
+
+     Returns:
+         List[np.ndarray]: A list of reordering indices for each fragment.
+
+     Main Concept:
+         Reorders the orbitals to group fragment orbitals together.
+
+     Math Detail:
+         The reordering indices are computed as:
+             reorder_idx = [fragment_indices, rest_indices]
+         where fragment_indices are the indices of the fragment orbitals and rest_indices are the remaining indices.
     """
     reorder_idxs = []
     for frag in fragments:
@@ -86,23 +91,24 @@ def get_projector_matrix(rdm: np.ndarray,
                          reorder_idx: np.ndarray,
                          threshold: float = 1e-5) -> np.ndarray:
     """
-    Calculate the DMET embedding projector matrix for a given one-particle RDM and fragment indices.
+    Generate the projector matrix for a given fragment.
 
-    Parameters
-    ----------
-    rdm : (M, M) ndarray
-        The global one-particle reduced density matrix in AO basis.
-    fragment : (f,) ndarray of ints
-        The indices of the fragment orbitals (0-based).
-    reorder_idx : (M,) ndarray of ints
-        A permutation array to reorder the orbitals such that fragment indices come first.
-    threshold : float
-        Threshold to select bath orbitals (0 < occ < 1).
+    Args:
+        onebody_rdm (np.ndarray): The one-body reduced density matrix.
+        fragment (np.ndarray): The indices of the fragment.
+        reorder_idx (np.ndarray): The reordering indices for the orbitals.
+        bath_threshold (float): The threshold for bath orbitals.
 
-    Returns
-    -------
-    P : (M, f + b) ndarray
-        The unitary projector onto the fragment plus bath space, where b = number of bath orbitals.
+    Returns:
+        np.ndarray: The projector matrix for the fragment.
+
+    Main Concept:
+        Constructs a projector matrix to embed the fragment into the full system.
+
+    Math Detail:
+        The projector matrix is computed as:
+            P = \sum_{i \in fragment} |i><i|
+        where |i> are the basis states of the fragment.
     """
     # 1. Reorder the RDM so that fragment orbitals are first
     rdm_full = rdm[np.ix_(reorder_idx, reorder_idx)]

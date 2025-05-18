@@ -13,11 +13,24 @@ class ProblemSolver(ABC):
     @abstractmethod
     def solve(self, hamiltonian : FermionOperator, number_of_orbitals :int, **kwargs) -> tuple[float, ndarray, ndarray]:
         """
-        Solve the problem defined by the Hamiltonian.
+        Solve the given Hamiltonian and return the energy and reduced density matrices.
+
         Args:
             hamiltonian (FermionOperator): The Hamiltonian to solve.
-            **kwargs: Additional arguments for the solver.
+            number_of_orbitals (int): The number of orbitals in the system.
+
         Returns:
-            tuple[float, ndarray]: The energy and the one-body density matrix and the two-body density matrix.
+            Tuple[float, np.ndarray, np.ndarray]:
+                - Ground state energy (float).
+                - One-body reduced density matrix (np.ndarray).
+                - Two-body reduced density matrix (np.ndarray).
+
+        Main Concept:
+            Solves the eigenvalue problem for the Hamiltonian to find the ground state energy and density matrices.
+
+        Math Detail:
+            The eigenvalue problem is solved as:
+                H \psi = E \psi
+            The density matrices are computed from the ground state wavefunction \psi.
         """
         pass
