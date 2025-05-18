@@ -24,6 +24,7 @@ def build_hamiltonian_from_one_two_body(h1_emb: np.ndarray, h2_emb: np.ndarray, 
                 h_frag += FermionOperator(((p, 1), (q, 0)), coeff)
 
     # Add two-body terms
+    n_emb = h2_emb.shape[0]
     for p in range(n_emb):
         for q in range(n_emb):
             for r in range(n_emb):

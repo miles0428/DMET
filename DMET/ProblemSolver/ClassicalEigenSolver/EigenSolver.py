@@ -60,7 +60,7 @@ class EigenSolver(ProblemSolver):
                 op = FermionOperator(f"{p}^ {q}")
                 mat = get_sparse_operator(op, n_qubits=number_of_orbitals)
                 rdm1[p, q] = np.vdot(psi, mat @ psi)
-        return rdm1.real
+        return rdm1
 
     def _get_two_body_density_matrix(self, psi: np.ndarray, number_of_orbitals: int) -> ndarray:
         """
@@ -82,7 +82,7 @@ class EigenSolver(ProblemSolver):
                         op = FermionOperator(f"{p}^ {q}^ {s} {r}")
                         mat = get_sparse_operator(op, n_qubits=number_of_orbitals)
                         rdm2[p, q, r, s] = np.vdot(psi, mat @ psi)
-        return rdm2.real
+        return rdm2
 
 
 if __name__ == "__main__":
