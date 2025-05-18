@@ -19,7 +19,7 @@ def build_hamiltonian_from_one_two_body(h1_emb: np.ndarray, h2_emb: np.ndarray, 
     Math Detail:
         The Hamiltonian is constructed as:
             H = \sum_{pq} h1_emb[p, q] c_p^\dagger c_q
-                + 0.5 * \sum_{pqrs} h2_emb[p, q, r, s] c_p^\dagger c_q^\dagger c_s c_r
+                +   \sum_{pqrs} h2_emb[p, q, r, s] c_p^\dagger c_q^\dagger c_s c_r
         where c_p^\dagger and c_q are creation and annihilation operators.
     """
     n_emb = h1_emb.shape[0]
@@ -42,7 +42,7 @@ def build_hamiltonian_from_one_two_body(h1_emb: np.ndarray, h2_emb: np.ndarray, 
                     if abs(coeff) > threshold:
                         h_frag += FermionOperator(
                             ((p, 1), (q, 1), (s, 0), (r, 0)),
-                            0.5 * coeff
+                            coeff
                         )
 
     return h_frag

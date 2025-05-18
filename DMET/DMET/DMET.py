@@ -137,6 +137,13 @@ class DMET:
             # print(f"Fragment {i}: Two-body terms: {reorder_twobody_terms}")
             embedded_onebody_terms = projector_conjugate @ reorder_onebody_terms @ projector
             embedded_twobody_terms = reorder_twobody_terms[np.ix_(np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length))]
+            # embedded_twobody_terms= np.einsum('ip,jq,pqrs,rk,sl->ijkl', 
+            #                                   projector_conjugate, 
+            #                                   projector_conjugate, 
+            #                                   reorder_twobody_terms, 
+            #                                   projector, 
+            #                                   projector,
+            #                                   optimize='greedy')
             embedded_hamiltonian = FragmentHamiltonian(embedded_onebody_terms, embedded_twobody_terms)
             # print(f"Fragment {i}: Embedded One-body terms: {embedded_onebody_terms}")
             # print(f"Fragment {i}: Embedded Two-body terms: {embedded_twobody_terms}")
@@ -161,7 +168,7 @@ class DMET:
             E = Tr(h * \gamma) + 0.5 * \sum H_{ijkl} * \Gamma_{ijkl}
         """
         idx = list(range(fragment_length))
-        print(idx)
+        # print(idx)
         h = fragment_hamiltonian.onebody_terms[np.ix_(idx, idx)]
         g = fragment_hamiltonian.twobody_terms[np.ix_(idx, idx, idx, idx)]
         gamma = onebody_rdm[np.ix_(idx, idx)]

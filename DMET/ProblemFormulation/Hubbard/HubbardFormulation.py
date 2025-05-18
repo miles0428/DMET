@@ -133,7 +133,7 @@ class ManyBodyHubbardFormulation(ManyBodyProblemFormulation):
         self.H,self.onebody_terms,self.twobody_terms = self.get_hamiltonian()
 
     def get_hamiltonian(self):
-        """
+        r"""
         Construct the many-body Hamiltonian for the Hubbard model.
 
         Returns:
