@@ -25,14 +25,15 @@ setup(
     install_requires=[
         "numpy",
         "scipy",
-        "openfermion"
+        "openfermion",
+        "tqdm"  # Added dependency
     ],
     entry_points={
         "console_scripts": [
             "dmet-hubbard=DMET.DMET:main"
         ]
     },
-    author="Your Name",
+    author="Yu-Cheng Chung",
     description="A DMET implementation for the Hubbard model.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
