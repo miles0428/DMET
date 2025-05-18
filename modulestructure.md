@@ -27,3 +27,6 @@
 ### class problemsolver
 - function solve -> energy, rdm
 
+### class EigenSolver
+- function solve -> energy, onerdm, twordm
+
