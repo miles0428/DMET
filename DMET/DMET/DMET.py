@@ -182,7 +182,7 @@ class DMET:
         print(f'two-body terms energy: {np.einsum("ijkl,ijkl->", g, Gamma)}')
         energy = (
             np.einsum("ij,ij->", h, gamma) +
-            np.einsum("ijkl,ijkl->", g, Gamma)
+            0.5 * np.einsum("ijkl,ijkl->", g, Gamma)
         )
         return energy
 

@@ -4,7 +4,6 @@ import typing
 from openfermion import FermionOperator
 from numpy import ndarray
 from openfermion.linalg import get_sparse_operator
-from ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
 
 class ProblemSolver(ABC):
     def __init__(self):
