@@ -167,10 +167,10 @@ class ManyBodyHubbardFormulation(ManyBodyProblemFormulation):
                 onebody_terms[p, q] = -self.t
                 onebody_terms[q, p] = -self.t
         for i in range(self.L):
-            p_up = 2 * i
-            p_down = 2 * i + 1
-            H += self.U * FermionOperator(f"{p_up}^ {p_up} {p_down}^ {p_down}", 1.0)
-            twobody_terms[p_up, p_up, p_down, p_down] = self.U
+            n_up = FermionOperator(((2*i, 1), (2*i, 0)))      # a^\dagger_{2i} a_{2i}
+            n_down = FermionOperator(((2*i+1, 1), (2*i+1, 0)))
+            H += self.U * n_up * n_down
+            twobody_terms[2*i, 2*i+1, 2*i, 2*i+1] = self.U
         return H, onebody_terms, twobody_terms
 
 

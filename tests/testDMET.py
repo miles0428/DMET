@@ -3,8 +3,8 @@ from DMET.ProblemFormulation.ProblemFormulation import ProblemFormulation
 from DMET.DMET import DMET
 from DMET.ProblemSolver.ClassicalEigenSolver import EigenSolver
 import numpy as np
-one_body_hubbard = OneBodyHubbardFormulation(L=6, t=1.0, number_of_electrons=6)
-many_body_hubbard = ManyBodyHubbardFormulation(L=6, t=1.0, U=2)
+one_body_hubbard = OneBodyHubbardFormulation(L=5, t=1.0, number_of_electrons=4)
+many_body_hubbard = ManyBodyHubbardFormulation(L=5, t=1.0, U=8)
 hubbard_problem = ProblemFormulation()
 hubbard_problem.one_body_problem_formulation = one_body_hubbard
 hubbard_problem.many_body_problem_formulation = many_body_hubbard
@@ -12,7 +12,8 @@ hubbard_problem.many_body_problem_formulation = many_body_hubbard
 # fragments = [[0, 1,2], [3,4,5],[6,7]]
 # fragments = [[0, 1,2,3], [4,5,6,7]]
 # fragments = [list(range(8))]
-fragments = [[ i+4*j for  i in range(4)]for j in range(3)]
+fragments = [[0, 1,2], [3,4,5],[6,7,8,9]]
+# fragments = [[ i+5*j for  i in range(4)]for j in range(3)]
 problemsolver = EigenSolver()
 DMET_instance = DMET(hubbard_problem,fragments=fragments,problem_solver=problemsolver,verbose=True)
 energy =  DMET_instance.run(1,-1)

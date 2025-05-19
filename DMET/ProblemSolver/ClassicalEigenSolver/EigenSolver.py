@@ -30,6 +30,7 @@ class EigenSolver(ProblemSolver):
                 H \psi = E \psi
             The density matrices are computed from the ground state wavefunction \psi.
         """
+        # print(hamiltonian)
         hamiltonian_sparse = self._transform_hamiltonian_to_matrix(hamiltonian, number_of_orbitals)
         energy, eigenstate = get_ground_state(hamiltonian_sparse, **kwargs)
         psi = eigenstate.ravel()  # Convert sparse vector to dense

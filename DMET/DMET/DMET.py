@@ -175,12 +175,14 @@ class DMET:
         Gamma = twobody_rdm[np.ix_(idx, idx, idx, idx)]
         
         # print(fragment_hamiltonian.onebody_terms)
-        # print(g)
+        # print(f"Fragment Hamiltonian: {fragment_hamiltonian.H}")
         # print(gamma)
         # print(Gamma)
+        # fragment two-body terms energy
+        print(f'two-body terms energy: {np.einsum("ijkl,ijkl->", g, Gamma)}')
         energy = (
             np.einsum("ij,ij->", h, gamma) +
-            0.5 * np.einsum("ijkl,ijkl->", g, Gamma)
+            np.einsum("ijkl,ijkl->", g, Gamma)
         )
         return energy
 
