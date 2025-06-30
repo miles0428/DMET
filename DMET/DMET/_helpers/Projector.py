@@ -3,58 +3,58 @@
 import numpy as np
 
 def get_projector_matrix(rdm: np.ndarray, fragment: np.ndarray, reorder_idx:np.ndarray , threshold: float = 1e-3) -> np.ndarray:
-     """
-     Calculate the DMET projector matrix for a given one-particle RDM and fragment indices.
+    """
+    Calculate the DMET projector matrix for a given one-particle RDM and fragment indices.
 
-     Parameters
-     ----------
-     rdm : (M, M) ndarray
-          The global one-particle reduced density matrix in AO basis.
-     fragment : (n_f,) ndarray of ints
-          The indices of the fragment orbitals (0-based).
-     threshold : float
-          Singular value threshold to select bath orbitals.
+    Parameters
+    ----------
+    rdm : (M, M) ndarray
+        The global one-particle reduced density matrix in AO basis.
+    fragment : (n_f,) ndarray of ints
+        The indices of the fragment orbitals (0-based).
+    threshold : float
+        Singular value threshold to select bath orbitals.
 
-     Returns
-     -------
-     P : (M, M) ndarray
-          The DMET embedding projector onto the fragment + bath space.
-     """
-     # print(reorder_idx)
-     rdm = rdm[np.ix_(reorder_idx, reorder_idx)]
-     shape = rdm.shape
-     length = len(fragment)
-     P_identity = np.eye(shape[0],length)
-     rdm_bath = rdm[length:, length:]
-     eigvals, eigvecs = np.linalg.eigh(rdm_bath)
-     idx = eigvals.argsort()
-     eigvals = eigvals[idx]
-    #  print(f"eigvals: {eigvals}")
-     eigvecs = eigvecs[:, idx]
-     number_of_bath_orbitals = np.sum((eigvals > threshold) & (eigvals < 1 - threshold))
-     bath_orbital_indices = np.where((eigvals > threshold) & (eigvals < 1 - threshold))[0]
-    #  print(f"bath_orbital_indices: {bath_orbital_indices}")
-     #  eigvals = eigvals[:number_of_bath_orbitals]
-     #  eigvecs = eigvecs[:, :number_of_bath_orbitals]
-    #  number_of_orbitals_close_to_zero = np.sum(eigvals < threshold)
-    #  number_of_orbitals_close_to_one = np.sum(eigvals > 1 - threshold)
-    #  eigvals = eigvals[number_of_orbitals_close_to_zero:shape[0]-number_of_orbitals_close_to_one]
-    #  eigvecs = eigvecs[:, number_of_orbitals_close_to_zero:shape[0]-number_of_orbitals_close_to_one]
-    #  print(f"number_of_bath_orbitals: {number_of_bath_orbitals}")
-     eigvals = eigvals[bath_orbital_indices]
-    #  print(f"eigvals: {eigvals}")
-     eigvecs = eigvecs[:, bath_orbital_indices]
-    #  print(f"eigvals: {eigvals}")
-    #  print(f"eigvecs: {eigvecs}")
-     Pbath = np.zeros((shape[0],number_of_bath_orbitals), dtype=complex)
-     Pbath[length:, :] = eigvecs
-     Pbath[:length, :] = np.zeros((length,number_of_bath_orbitals), dtype=complex)
+    Returns
+    -------
+    P : (M, M) ndarray
+        The DMET embedding projector onto the fragment + bath space.
+    """
+    number_of_occupations = np.trace(rdm)
+    # print(f"Number of occupations: {number_of_occupations}")
+    number_of_occupations = int(np.round(number_of_occupations))
+    rdm = rdm[np.ix_(reorder_idx, reorder_idx)]
+    shape = rdm.shape
+    length = len(fragment)
+    P_identity = np.eye(shape[0],length)
+    rdm_bath = rdm[length:, length:]
+    eigvals, eigvecs = np.linalg.eigh(rdm_bath)
+    # count number of eigenvalues equal to 1
+    num_one = np.sum(np.isclose(eigvals, 1, atol=threshold))
+    # print(f"Number of eigenvalues equal to 1: {num_one}")
+    num_one = int(np.round(num_one))
+    number_of_embedded_electrons = number_of_occupations - num_one
+    # print(f"Number of embedded electrons: {number_of_embedded_electrons}")
+    idx = np.abs(eigvals-1).argsort()
+    eigvals = eigvals[idx]
+    # print(f"Eigenvalues of the bath RDM: {eigvals}")
+    eigvecs = eigvecs[:, idx]
+    number_of_bath_orbitals = np.sum((eigvals > threshold) & (eigvals < 1 - threshold))
+    bath_orbital_indices = np.where((eigvals > threshold) & (eigvals < 1 - threshold))[0]
+    eigvals = eigvals[bath_orbital_indices]
+    eigvecs = eigvecs[:, bath_orbital_indices]
+    # if number_of_bath_orbitals > length:
+    #     eigvals = eigvals[:length]
+    #     eigvecs = eigvecs[:,:length]
+    #     number_of_bath_orbitals = length
+    Pbath = np.zeros((shape[0],number_of_bath_orbitals), dtype=complex)
+    Pbath[length:, :] = eigvecs
+    Pbath[:length, :] = np.zeros((length,number_of_bath_orbitals), dtype=complex)
 
-     P=np.concatenate((P_identity, Pbath), axis=1)
-     # check orthonormality
-     assert np.allclose(P.T.conj() @ P, np.eye(P.shape[1]), atol=1e-10), "Projector matrix is not orthonormal"  
-    
-     return P
+    P=np.concatenate((P_identity, Pbath), axis=1)
+    assert np.allclose(P.T.conj() @ P, np.eye(P.shape[1]), atol=1e-10), "Projector matrix is not orthonormal"  
+
+    return P, number_of_embedded_electrons
      
 
 

@@ -106,7 +106,7 @@ class OneBodyHubbardFormulation(OneBodyProblemFormulation):
         """
         if self._wavefunction is None:
             _, self._wavefunction = self.get_analytic_solution(self.number_of_electrons)
-        return np.dot(self._wavefunction, self._wavefunction.conjugate().T)
+        return np.dot(self._wavefunction, self._wavefunction.conjugate().T).real.round(10)
 
 class ManyBodyHubbardFormulation(ManyBodyProblemFormulation):
     def __init__(self, L, t, U):
@@ -167,11 +167,16 @@ class ManyBodyHubbardFormulation(ManyBodyProblemFormulation):
                 onebody_terms[p, q] = -self.t
                 onebody_terms[q, p] = -self.t
         for i in range(self.L):
-            n_up = FermionOperator(((2*i, 1), (2*i, 0)))      # a^\dagger_{2i} a_{2i}
-            n_down = FermionOperator(((2*i+1, 1), (2*i+1, 0)))
-            H += self.U * n_up * n_down
-            twobody_terms[2*i, 2*i+1, 2*i, 2*i+1] = self.U
+            p = 2 * i
+            q = 2 * i 
+            r = 2 * i + 1
+            s = 2 * i + 1
+            H += FermionOperator(((p,1),(r,1),(s,0),(q,0)), coefficient=self.U)
+            twobody_terms[p,q,r,s] = self.U
         return H, onebody_terms, twobody_terms
 
 
 
+
+ 
+    

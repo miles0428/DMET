@@ -16,7 +16,7 @@ def with_default_kwargs(defaults):
     return decorator
 
 class DMET:
-    @with_default_kwargs({'bath_threshold': 1e-5, 'verbose': False, 'number_of_bath_orbitals': None})
+    @with_default_kwargs({'bath_threshold': 1e-5, 'verbose': False, 'number_of_bath_orbitals': None, 'PBC': False})
     def __init__(self, problem_formulation: ProblemFormulation, fragments: List[np.ndarray], problem_solver: ProblemSolver, **kwargs):
         """
         Initialize the DMET class with a problem formulation, fragments, and a solver.
@@ -66,14 +66,16 @@ class DMET:
         """
         from ._helpers.Projector import get_projector_matrix
         projectors = []
+        number_of_electrons_in_fragments = []
         if reorder_idxs is None:
             from ._helpers.Projector import get_projector_reorder_idxs
             reorder_idxs = get_projector_reorder_idxs(self.fragments, self.onebodyrdm.shape[0])
         for i,fragment in enumerate(self.fragments):
             reorder_idx = reorder_idxs[i] 
-            projector = get_projector_matrix(self.onebodyrdm, fragment, reorder_idx, self.kwargs['bath_threshold'])
+            projector, number_of_electrons = get_projector_matrix(self.onebodyrdm, fragment, reorder_idx, self.kwargs['bath_threshold'])
             projectors.append(projector)
-        return projectors
+            number_of_electrons_in_fragments.append(number_of_electrons)
+        return projectors, number_of_electrons_in_fragments
     
     def get_multiplier_hamiltonian(self, mu: float, fragment: np.ndarray):
         """
@@ -118,7 +120,7 @@ class DMET:
         """
         from ._helpers.Projector import get_projector_reorder_idxs
         reorder_idxs = get_projector_reorder_idxs(self.fragments, self.onebodyrdm.shape[0])
-        projectors = self.get_projectors(reorder_idxs=reorder_idxs)
+        projectors, num_electrons = self.get_projectors(reorder_idxs=reorder_idxs)
         onebody_terms = self.many_body_problem_formulation.onebody_terms
         twobody_terms = self.many_body_problem_formulation.twobody_terms
         embedded_hamiltonians = []
@@ -129,25 +131,18 @@ class DMET:
             if not np.allclose(np.eye(projector.shape[1]), projector_conjugate @ projector, atol=1e-5):
                 print(projector @ projector_conjugate)
                 raise ValueError("Projector is not unitary.")
+            
             reorder_idx = reorder_idxs[i]
+            # print(f"Fragment {i}: Reorder indices: {reorder_idx}")
             fragment_length = len(self.fragments[i])
             reorder_onebody_terms = onebody_terms[np.ix_(reorder_idx, reorder_idx)]
             reorder_twobody_terms = twobody_terms[np.ix_(reorder_idx, reorder_idx, reorder_idx, reorder_idx)]
-            # print(f"Fragment {i}: One-body terms: {reorder_onebody_terms}")
-            # print(f"Fragment {i}: Two-body terms: {reorder_twobody_terms}")
             embedded_onebody_terms = projector_conjugate @ reorder_onebody_terms @ projector
             embedded_twobody_terms = reorder_twobody_terms[np.ix_(np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length))]
-            # embedded_twobody_terms= np.einsum('ip,jq,pqrs,rk,sl->ijkl', 
-            #                                   projector_conjugate, 
-            #                                   projector_conjugate, 
-            #                                   reorder_twobody_terms, 
-            #                                   projector, 
-            #                                   projector,
-            #                                   optimize='greedy')
-            embedded_hamiltonian = FragmentHamiltonian(embedded_onebody_terms, embedded_twobody_terms)
-            # print(f"Fragment {i}: Embedded One-body terms: {embedded_onebody_terms}")
-            # print(f"Fragment {i}: Embedded Two-body terms: {embedded_twobody_terms}")
+            embedded_hamiltonian = FragmentHamiltonian(embedded_onebody_terms, embedded_twobody_terms,number_of_electrons= num_electrons[i])
             embedded_hamiltonians.append(embedded_hamiltonian)
+            if self.kwargs['PBC']:
+                break
         print("----------------------")
         return embedded_hamiltonians
             
@@ -165,24 +160,23 @@ class DMET:
             float: The energy of the fragment.
 
         Math:
-            E = Tr(h * \gamma) + 0.5 * \sum H_{ijkl} * \Gamma_{ijkl}
+            E = Tr(h * \gamma) +  \sum H_{ijkl} * \Gamma_{ijkl} 
         """
         idx = list(range(fragment_length))
+        idx_bath = list(range(fragment_length, onebody_rdm.shape[0]))
         # print(idx)
         h = fragment_hamiltonian.onebody_terms[np.ix_(idx, idx)]
         g = fragment_hamiltonian.twobody_terms[np.ix_(idx, idx, idx, idx)]
+        h_fragment_bath = fragment_hamiltonian.onebody_terms[np.ix_(idx, idx_bath)]
         gamma = onebody_rdm[np.ix_(idx, idx)]
+        gamma_fragment_bath = onebody_rdm[np.ix_(idx, idx_bath)]
         Gamma = twobody_rdm[np.ix_(idx, idx, idx, idx)]
-        
-        # print(fragment_hamiltonian.onebody_terms)
-        # print(f"Fragment Hamiltonian: {fragment_hamiltonian.H}")
-        # print(gamma)
-        # print(Gamma)
-        # fragment two-body terms energy
-        print(f'two-body terms energy: {np.einsum("ijkl,ijkl->", g, Gamma)}')
+        # print shapes
+        # print(f"Shapes: h: {h.shape}, g: {g.shape}, h_bath: {h_bath.shape}, gamma: {gamma.shape}, gamma_bath: {gamma_bath.shape}, Gamma: {Gamma.shape}")
         energy = (
-            np.einsum("ij,ij->", h, gamma) +
-            0.5 * np.einsum("ijkl,ijkl->", g, Gamma)
+            np.einsum("ij,ij->", h, gamma) 
+            +np.einsum("klmn,klmn->", g, Gamma)
+            + np.einsum("ij,ij->", h_fragment_bath, gamma_fragment_bath)
         )
         return energy
 
@@ -212,7 +206,8 @@ class DMET:
         """
         embedded_hamiltonian = fragment_hamiltonian.H + multiplier_hamiltonian
         # fragment_length = len(fragment_hamiltonian.onebody_terms)
-        energy, onebody_rdm, twobody_rdm= self.problem_solver.solve(embedded_hamiltonian, number_of_orbitals=number_of_orbitals)
+        energy, onebody_rdm, twobody_rdm= self.problem_solver.solve(embedded_hamiltonian, number_of_orbitals=number_of_orbitals, number_of_electrons=fragment_hamiltonian.number_of_electrons)
+        # print(onebody_rdm.round(5).real)
         fragment_energy = self.get_fragment_energy(fragment_hamiltonian, onebody_rdm, twobody_rdm, fragment_length)
         return fragment_energy, onebody_rdm, twobody_rdm
 
@@ -245,7 +240,8 @@ class DMET:
             
         for i,fragmentHamiltonian in enumerate(self.fragment_hamiltonians):
             fragment = self.fragments[i]
-            number_of_orbitals = fragmentHamiltonian.onebody_terms.shape[0]
+            number_of_orbitals = max(fragmentHamiltonian.onebody_terms.shape[0], fragmentHamiltonian.twobody_terms.shape[0])
+            print(f"Fragment {i}: Number of orbitals: {number_of_orbitals}")
             multiplier_hamiltonian = self.get_multiplier_hamiltonian(mu, fragment)
             fragment_energy, onebody_rdm, twobody_rdm = self.solve_fragment(fragmentHamiltonian, multiplier_hamiltonian, number_of_orbitals=number_of_orbitals,fragment_length=len(fragment))
             total_energy += fragment_energy
@@ -254,14 +250,14 @@ class DMET:
             number_of_electrons += ne
             if self.kwargs['verbose']:
                 print(f"Fragment {i}: Energy = {fragment_energy:.5f}, Number of electrons = {ne:.5f}")
-
+            if self.kwargs['PBC']:
+                total_energy*= len(self.fragments)
+                number_of_electrons*= len(self.fragments)
+                break
         self.total_energies.append(total_energy)
         if self.kwargs['verbose']:
             print(f"Total energy: {total_energy:.5f}, Number of electrons: {number_of_electrons:.5f}")
             print("---------------------")
-            
-        # stop here for debugging
-        # number_of_electrons = 3
         return total_energy, number_of_electrons
 
     def run(self, mu0: float = None, mu1: float = None):
@@ -286,16 +282,16 @@ class DMET:
         from scipy.optimize import newton,minimize
         from scipy.optimize import root_scalar
             
-        mu0 = np.random.rand() if mu0 is None else mu0
-        mu1 = -np.random.rand() if mu1 is None else mu1
+        mu0 = np.random.rand()[0] if mu0 is None else mu0
+        mu1 = -np.random.rand()[0] if mu1 is None else mu1
         self.total_energies = []
         self.shot = 0
         # use gradient descent to find the chemical potential
         self.fragment_hamiltonians = self.get_fragment_hamiltonians()
         
-        # result = minimize(self.objective, [mu0], method='BFGS', options={'disp': self.kwargs['verbose']})
-        result = newton(self.objective,x0=mu0, tol=1e-6, maxiter=1000, x1=mu1)
-        # result = root_scalar(self.objective, bracket=[mu0,mu1], method='brentq', xtol=1e-6, maxiter=1000)
+        # result = minimize(self.objective, [mu0], method='BFGS')
+        # result = newton(self.objective,x0=mu0, tol=1e-6, maxiter=1000, x1=mu1)
+        result = root_scalar(self.objective, bracket=[mu0,mu1], method='brentq', xtol=1e-3, maxiter=1000)
         if result is not None:
             print(f"Converged to chemical potential: {result}")
             print(f"Total energy: {self.total_energies[-1]}")
@@ -320,7 +316,7 @@ class DMET:
             The objective is computed as:
                 objective = N_electrons_DMET(mu) - N_electrons_onebody
         """
-        mu = mu
+        # mu = mu[0]
         _, number_of_electrons_dmet = self.singleshot(mu)
         number_of_electrons_one_body = np.trace(self.onebodyrdm)
         return (number_of_electrons_dmet - number_of_electrons_one_body)
@@ -349,7 +345,7 @@ class DMET:
         return np.all(np.isin(all_lattice_sites,fragment))
     
 class FragmentHamiltonian:
-    def __init__(self, onebody_terms: np.ndarray, twobody_terms: np.ndarray):
+    def __init__(self, onebody_terms: np.ndarray, twobody_terms: np.ndarray, number_of_electrons: int = None):
         """
         Initialize the embedded Hamiltonian with one-body and two-body integrals.
 
@@ -370,6 +366,8 @@ class FragmentHamiltonian:
         from ._helpers.BuildHamiltonian import build_hamiltonian_from_one_two_body
         self.onebody_terms = onebody_terms
         self.twobody_terms = twobody_terms
+        self.number_of_electrons = number_of_electrons
+        assert number_of_electrons != None, "Number of electrons must be specified for the fragment Hamiltonian." 
         self.H = build_hamiltonian_from_one_two_body(onebody_terms, twobody_terms)
         # make sure onebody_terms and twobody_terms have the same shape
         if self.onebody_terms.shape[0] < self.twobody_terms.shape[0]:

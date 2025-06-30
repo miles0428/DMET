@@ -7,10 +7,10 @@ from openfermion.linalg import get_sparse_operator
 
 class ProblemSolver(ABC):
     def __init__(self):
+        # Initialize the problem solver
         pass
-    
     @abstractmethod
-    def solve(self, hamiltonian : FermionOperator, number_of_orbitals :int, **kwargs) -> tuple[float, ndarray, ndarray]:
+    def solve(self, hamiltonian : FermionOperator, number_of_orbitals :int, number_of_electrons : int, **kwargs) -> tuple[float, ndarray, ndarray]:
         """
         Solve the given Hamiltonian and return the energy and reduced density matrices.
 

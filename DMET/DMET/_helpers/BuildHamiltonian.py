@@ -34,14 +34,14 @@ def build_hamiltonian_from_one_two_body(h1_emb: np.ndarray, h2_emb: np.ndarray, 
 
     # Add two-body terms
     n_emb = h2_emb.shape[0]
-    for p in range(n_emb):
-        for q in range(n_emb):
-            for r in range(n_emb):
-                for s in range(n_emb):
-                    coeff = h2_emb[p, q, r, s]
+    for k in range(n_emb):
+        for l in range(n_emb):
+            for m in range(n_emb):
+                for n in range(n_emb):
+                    coeff = h2_emb[k, l, m, n]
                     if abs(coeff) > threshold:
                         h_frag += FermionOperator(
-                            ((p, 1), (q, 1), (s, 0), (r, 0)),
+                            ((k, 1), (m, 1), (n, 0), (l, 0)),
                             coeff
                         )
 
