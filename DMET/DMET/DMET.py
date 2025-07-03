@@ -238,7 +238,6 @@ class DMET:
         for i,fragmentHamiltonian in enumerate(self.fragment_hamiltonians):
             fragment = self.fragments[i]
             number_of_orbitals = max(fragmentHamiltonian.onebody_terms.shape[0], fragmentHamiltonian.twobody_terms.shape[0])
-            print(f"Fragment {i}: Number of orbitals: {number_of_orbitals}")
             multiplier_hamiltonian = self.get_multiplier_hamiltonian(mu, fragment)
             fragment_energy, onebody_rdm, twobody_rdm = self.solve_fragment(fragmentHamiltonian, multiplier_hamiltonian, number_of_orbitals=number_of_orbitals,fragment_length=len(fragment))
             total_energy += fragment_energy
@@ -246,7 +245,7 @@ class DMET:
             ne = np.trace(onebody_rdm[np.ix_(range(len(fragment)), range(len(fragment)))])
             number_of_electrons += ne
             if self.kwargs['verbose']:
-                print(f"Fragment {i}: Energy = {fragment_energy:.5f}, Number of electrons = {ne:.5f}")
+                print(f"Fragment {i}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
             if self.kwargs['PBC']:
                 total_energy*= len(self.fragments)
                 number_of_electrons*= len(self.fragments)
@@ -277,16 +276,44 @@ class DMET:
             The chemical potential is adjusted to minimize this objective.
         """
         from scipy.optimize import newton
+        from scipy.optimize import minimize_scalar
+        from scipy.optimize import root_scalar
             
         mu0 = np.random.rand()[0] if mu0 is None else mu0
         mu1 = -np.random.rand()[0] if mu1 is None else mu1
+        if mu0 == mu1:
+            print("mu0 and mu1 are the same. Adjusting mu1.")
+            mu1 = mu0 + 0.1
+        if mu0 < mu1:
+            mu0, mu1 = mu1, mu0
         self.total_energies = []
         self.shot = 0
         self.fragment_hamiltonians = self.get_fragment_hamiltonians()
-        
-        result = newton(self.objective,x0=mu0, tol=1e-6, maxiter=1000, x1=mu1)
+        self.objective_buffer = {}
+        objective_value = self.objective(mu0)
+        objective_value1 = self.objective(mu1)
+        for _ in range(10):
+            if objective_value * objective_value1 > 0:
+                # check which one is closer to zero
+                if abs(objective_value) < abs(objective_value1):
+                    mu0, mu1 = mu0 + (mu0-mu1) , mu0
+                    objective_value1 = objective_value
+                    objective_value = self.objective(mu0)
+                else:
+                    mu0, mu1 = mu1, mu1 - (mu0-mu1)
+                    objective_value = objective_value1
+                    objective_value1 = self.objective(mu1)
+            else:
+                break
+        if objective_value * objective_value1 > 0:
+            print(f"Objective values at mu0 and mu1 are both positive or negative: {objective_value}, {objective_value1}. Adjusting mu0 and mu1.")
+            result = newton(self.objective,x0=mu0, tol=1e-4, maxiter=1000, x1=mu1)
+        elif objective_value * objective_value1 < 0:
+            # result = minimize_scalar(self.objective, bracket=(mu0, mu1), method='brent', xtol= 1e-3)
+            result = root_scalar(self.objective, bracket=[mu0, mu1], method='brentq', xtol=1e-5, rtol=1e-4, maxiter=1000)
+            
         if result is not None:
-            print(f"Converged to chemical potential: {result}")
+            print(f"Converged to chemical potential: \n{result}")   
             print(f"Total energy: {self.total_energies[-1]}")
         else:
             print("Failed to converge to a solution.")
@@ -309,9 +336,14 @@ class DMET:
             The objective is computed as:
                 objective = N_electrons_DMET(mu) - N_electrons_onebody
         """
+        mu = mu  # Ensure mu is an integer
+        if mu in self.objective_buffer:
+            return self.objective_buffer[mu]
         _, number_of_electrons_dmet = self.singleshot(mu)
-        number_of_electrons_one_body = np.trace(self.onebodyrdm)
-        return (number_of_electrons_dmet - number_of_electrons_one_body)
+        number_of_electrons_one_body = np.real(np.trace(self.onebodyrdm))
+        number_of_electrons_dmet = np.real(number_of_electrons_dmet)
+        self.objective_buffer[mu] = number_of_electrons_dmet - number_of_electrons_one_body
+        return number_of_electrons_dmet - number_of_electrons_one_body
     
     def is_all_lattice_sites_in_fragment(self, fragments: np.ndarray):
         """
