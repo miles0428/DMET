@@ -164,15 +164,12 @@ class DMET:
         """
         idx = list(range(fragment_length))
         idx_bath = list(range(fragment_length, onebody_rdm.shape[0]))
-        # print(idx)
         h = fragment_hamiltonian.onebody_terms[np.ix_(idx, idx)]
         g = fragment_hamiltonian.twobody_terms[np.ix_(idx, idx, idx, idx)]
         h_fragment_bath = fragment_hamiltonian.onebody_terms[np.ix_(idx, idx_bath)]
         gamma = onebody_rdm[np.ix_(idx, idx)]
         gamma_fragment_bath = onebody_rdm[np.ix_(idx, idx_bath)]
         Gamma = twobody_rdm[np.ix_(idx, idx, idx, idx)]
-        # print shapes
-        # print(f"Shapes: h: {h.shape}, g: {g.shape}, h_bath: {h_bath.shape}, gamma: {gamma.shape}, gamma_bath: {gamma_bath.shape}, Gamma: {Gamma.shape}")
         energy = (
             np.einsum("ij,ij->", h, gamma) 
             +np.einsum("klmn,klmn->", g, Gamma)
@@ -279,19 +276,15 @@ class DMET:
                 objective(mu) = N_electrons_DMET(mu) - N_electrons_onebody
             The chemical potential is adjusted to minimize this objective.
         """
-        from scipy.optimize import newton,minimize
-        from scipy.optimize import root_scalar
+        from scipy.optimize import newton
             
         mu0 = np.random.rand()[0] if mu0 is None else mu0
         mu1 = -np.random.rand()[0] if mu1 is None else mu1
         self.total_energies = []
         self.shot = 0
-        # use gradient descent to find the chemical potential
         self.fragment_hamiltonians = self.get_fragment_hamiltonians()
         
-        # result = minimize(self.objective, [mu0], method='BFGS')
-        # result = newton(self.objective,x0=mu0, tol=1e-6, maxiter=1000, x1=mu1)
-        result = root_scalar(self.objective, bracket=[mu0,mu1], method='brentq', xtol=1e-3, maxiter=1000)
+        result = newton(self.objective,x0=mu0, tol=1e-6, maxiter=1000, x1=mu1)
         if result is not None:
             print(f"Converged to chemical potential: {result}")
             print(f"Total energy: {self.total_energies[-1]}")
@@ -316,7 +309,6 @@ class DMET:
             The objective is computed as:
                 objective = N_electrons_DMET(mu) - N_electrons_onebody
         """
-        # mu = mu[0]
         _, number_of_electrons_dmet = self.singleshot(mu)
         number_of_electrons_one_body = np.trace(self.onebodyrdm)
         return (number_of_electrons_dmet - number_of_electrons_one_body)
