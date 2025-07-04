@@ -82,7 +82,6 @@ class EigenSolver(ProblemSolver):
                 op = FermionOperator(f"{p}^ {q}")
                 mat = self._transform_hamiltonian_to_matrix(op, number_of_orbitals, number_of_electrons)
                 value = np.vdot(psi, mat @ psi)
-                # print(f"rdm1[{p}, {q}] = {value}")
                 rdm1[p, q] = value
         return rdm1
 
