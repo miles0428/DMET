@@ -10,7 +10,7 @@ class EigenSolver(ProblemSolver):
         super().__init__()
 
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
-              number_of_electrons: int, occupied_orbitals: list[int], **kwargs):
+              number_of_electrons: int, **kwargs):
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
 
@@ -25,12 +25,17 @@ class EigenSolver(ProblemSolver):
                 cudaq_ham += coeff * cudaq.spin.pauli_string(pauli_str)
 
         # Step 2: Define particle-number-conserving ASWAP ansatz
-        def make_ansatz(n_qubits):
+        def make_ansatz(n_qubits, number_of_electrons=None):
+            if number_of_electrons > n_qubits:
+                raise ValueError("Number of electrons cannot exceed number of orbitals")
+            if number_of_electrons <= 0:
+                raise ValueError("Number of electrons cannot be negative or zero")
             param_count = n_qubits * (n_qubits - 1) // 2
             kernel, params = cudaq.make_kernel(*([float] * param_count))
             q = kernel.qalloc(n_qubits)
 
-            for i in occupied_orbitals:
+            # conservation of particle number
+            for i in range(number_of_electrons):
                 kernel.x(q[i])
 
             p_idx = 0
@@ -42,7 +47,7 @@ class EigenSolver(ProblemSolver):
 
             return kernel, params
 
-        kernel, params = make_ansatz(number_of_orbitals)
+        kernel, params = make_ansatz(number_of_orbitals, number_of_electrons)
 
         # Step 3: Run VQE
         result = cudaq.vqe(kernel, cudaq_ham, optimizer="COBYLA")
@@ -87,7 +92,7 @@ class EigenSolver(ProblemSolver):
 if __name__ == "__main__":
     # Example usage
     H = FermionOperator("0^ 1", 1.0) + FermionOperator("1^ 0", 1.0)
-    solver = QuantumEigenSolver()
+    solver = EigenSolver()
     energy, rdm1, rdm2 = solver.solve(H, number_of_orbitals=4, number_of_electrons=2, occupied_orbitals=[1, 2])
     print("Energy:", energy)
     print("1-RDM:\n", rdm1)
