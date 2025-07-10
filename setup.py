@@ -26,6 +26,7 @@ setup(
         "numpy",
         "scipy",
         "openfermion",
+        "cudaq",
         "tqdm"  # Added dependency
     ],
     entry_points={
