@@ -5,7 +5,7 @@ from openfermion import FermionOperator
 from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 
-class QuantumEigenSolver(ProblemSolver):
+class EigenSolver(ProblemSolver):
     def __init__(self):
         super().__init__()
 
