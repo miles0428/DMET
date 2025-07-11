@@ -19,7 +19,6 @@ class EigenSolver(ProblemSolver):
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
-        print('done')
         # Step 2: Define particle-number-conserving ASWAP ansatz
         def make_ansatz(n_qubits, number_of_electrons=None):
             assert number_of_electrons is not None, "number_of_electrons must be provided"
@@ -42,8 +41,6 @@ class EigenSolver(ProblemSolver):
         
         def cost_function(opt_params):
             energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
-            print(opt_params)
-            print(energy)
             return energy.real
         
         # Step 1: Optimize the ansatz parameters
@@ -51,12 +48,6 @@ class EigenSolver(ProblemSolver):
         result = minimize(cost_function, initial_params, method='COBYLA')
         opt_params = result.x
         energy = result.fun
-        print("Optimized parameters:", opt_params)
-        print("Optimized energy:", energy)
-        print('done')
-        # Step 3: Run VQE
-
-        print('done')
         # Step 4: Compute 1-RDM
         one_rdm, two_rdm = self.get_rdm(kernel, opt_params, number_of_orbitals)
         return energy, one_rdm, two_rdm
