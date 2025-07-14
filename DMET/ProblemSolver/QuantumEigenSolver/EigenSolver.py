@@ -10,16 +10,13 @@ class EigenSolver(ProblemSolver):
     def __init__(self):
         super().__init__()
 
-class EigenSolver(ProblemSolver):
-    def __init__(self):
-        super().__init__()
-
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
               number_of_electrons: int, **kwargs):
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
+        ''' uccsd 不準
         def make_ansatz(n_qubits, number_of_electrons=None):
             assert number_of_electrons is not None, "number_of_electrons must be provided"
             assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
@@ -38,14 +35,90 @@ class EigenSolver(ProblemSolver):
             return kernel,3* cudaq.kernels.uccsd_num_parameters( number_of_electrons, n_qubits)
         
         kernel, params = make_ansatz(number_of_orbitals, number_of_electrons)
-        
+        '''
+        ''' QEB 可行但有點不準
+        def make_ansatz(n_qubits, number_of_electrons=None):
+            assert number_of_electrons is not None, "number_of_electrons must be provided"
+            assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
+            assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
+            
+            @cudaq.kernel
+            def kernel(params: list[float]):
+                qubits = cudaq.qvector(n_qubits)
+                for i in range(number_of_electrons):
+                    x(qubits[i])
+                param_idx = 0
+                for i in range(n_qubits - 1):
+                    ry(params[param_idx], qubits[i])
+                    ry(params[param_idx+1], qubits[i+1])
+                    cz(qubits[i], qubits[i+1])
+                    ry(params[param_idx+2], qubits[i])
+                    ry(params[param_idx+3], qubits[i+1])
+                    param_idx += 4
+
+            num_params = 4 * (n_qubits - 1)
+            return kernel, num_params
+
+        kernel, params = make_ansatz(number_of_orbitals, number_of_electrons)
+        '''
+        def make_ansatz(n_qubits, number_of_electrons=None, depth = 1):
+            assert number_of_electrons is not None, "number_of_electrons must be provided"
+            assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
+            assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
+            
+            @cudaq.kernel
+            def kernel(params: list[float]):
+                qubits = cudaq.qvector(n_qubits)
+                for i in range(number_of_electrons):
+                    x(qubits[i])
+                param_idx = 0
+                for j in range(depth):
+                    for i in range(n_qubits):
+                        cx(qubits[(i+1) % n_qubits], qubits[i])
+                        rz(params[param_idx + 0], qubits[(i+1) % n_qubits])
+                        rz(np.pi, qubits[(i+1) % n_qubits])
+                        ry(params[param_idx + 1], qubits[(i+1) % n_qubits])
+                        ry(np.pi / 2, qubits[(i+1) % n_qubits])
+                        cx(qubits[i], qubits[(i+1) % n_qubits])
+                        ry(-np.pi / 2, qubits[(i+1) % n_qubits])
+                        ry(-params[param_idx + 1], qubits[(i+1) % n_qubits])
+                        rz(-np.pi, qubits[(i+1) % n_qubits])
+                        rz(-params[param_idx + 0], qubits[(i+1) % n_qubits])
+                        cx(qubits[(i+1) % n_qubits], qubits[(i) % n_qubits])
+                        param_idx += 2
+                    '''
+                    # q2 layer
+                    
+                    cx(qubits[(i+2) % n_qubits], qubits[(i+1) % n_qubits])
+                    rz(params[param_idx + 2], qubits[(i+2) % n_qubits])
+                    rz(np.pi, qubits[(i+2) % n_qubits])
+                    ry(params[param_idx + 3], qubits[(i+2) % n_qubits])
+                    ry(np.pi / 2, qubits[(i+2) % n_qubits])
+                    cx(qubits[(i+1) % n_qubits], qubits[(i+2) % n_qubits])
+                    ry(-np.pi / 2, qubits[(i+2) % n_qubits])
+                    ry(-params[param_idx + 3], qubits[(i+2) % n_qubits])
+                    rz(-np.pi, qubits[(i+2) % n_qubits])
+                    rz(-params[param_idx + 2], qubits[(i+2) % n_qubits])
+                    cx(qubits[(i+2) % n_qubits], qubits[(i+1) % n_qubits])
+                    '''      
+            num_params = 2 * n_qubits * depth
+            return kernel, num_params
+
+        kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = 2)
         def cost_function(opt_params):
             energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
             return energy.real
         
         # Step 1: Optimize the ansatz parameters
         initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
-        result = minimize(cost_function, initial_params, method='COBYLA')
+
+        result = minimize(
+            cost_function,
+            initial_params,
+            method='COBYLA',
+            options={'rhobeg': 0.5, 'maxiter': 500}
+        )
+
         opt_params = result.x
         energy = result.fun
         # Step 4: Compute 1-RDM
@@ -90,7 +163,6 @@ class EigenSolver(ProblemSolver):
                         two_rdm[p, r, q, s] = val/2
 
         return one_rdm, two_rdm
-
 
 
 if __name__ == "__main__":
