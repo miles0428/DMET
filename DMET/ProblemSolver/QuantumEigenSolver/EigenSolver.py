@@ -154,7 +154,7 @@ class EigenSolver(ProblemSolver):
                             val = vals[p][q][r][s]
                         if self.simulate_options["async_observe"] == True:
                             val = vals[p][q][r][s].get()
-                        two_rdm[p, q, r, s] = val / 2
+                        two_rdm[p, r, q, s] = val / 2
 
         return one_rdm, two_rdm
 
