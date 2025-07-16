@@ -16,7 +16,7 @@ def with_default_kwargs(defaults):
     return decorator
 
 class DMET:
-    @with_default_kwargs({'bath_threshold': 1e-5, 'verbose': False, 'number_of_bath_orbitals': None, 'PBC': False})
+    @with_default_kwargs({'bath_threshold': 1e-5, 'verbose': False, 'PBC': False, "process_mode": "default", 'number_of_workers': 1 })
     def __init__(self, problem_formulation: ProblemFormulation, fragments: List[np.ndarray], problem_solver: ProblemSolver, **kwargs):
         """
         Initialize the DMET class with a problem formulation, fragments, and a solver.
@@ -141,9 +141,7 @@ class DMET:
             embedded_twobody_terms = twobody_terms[np.ix_(
                 frag_idx, frag_idx, frag_idx, frag_idx
             )]
-            # reorder_twobody_terms = twobody_terms[np.ix_(reorder_idx, reorder_idx, reorder_idx, reorder_idx)]
             embedded_onebody_terms = projector_conjugate @ reorder_onebody_terms @ projector
-            # embedded_twobody_terms = reorder_twobody_terms[np.ix_(np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length))]
             embedded_hamiltonian = FragmentHamiltonian(embedded_onebody_terms, embedded_twobody_terms,number_of_electrons= num_electrons[i])
             embedded_hamiltonians.append(embedded_hamiltonian)
             if self.kwargs['PBC']:
@@ -234,33 +232,99 @@ class DMET:
             The number of electrons is computed as:
                 N_electrons = \sum_{fragments} Tr(RDM_onebody_fragment)
         """
-        total_energy = 0.0
-        number_of_electrons = 0
         self.shot += 1
         if self.kwargs['verbose']:
             print(f"Shot {self.shot}: mu = {mu}")
-            
-        for i,fragmentHamiltonian in enumerate(self.fragment_hamiltonians):
-            fragment = self.fragments[i]
-            number_of_orbitals = max(fragmentHamiltonian.onebody_terms.shape[0], fragmentHamiltonian.twobody_terms.shape[0])
-            multiplier_hamiltonian = self.get_multiplier_hamiltonian(mu, fragment)
-            fragment_energy, onebody_rdm, twobody_rdm = self.solve_fragment(fragmentHamiltonian, multiplier_hamiltonian, number_of_orbitals=number_of_orbitals,fragment_length=len(fragment))
-            total_energy += fragment_energy
-            # calculate the number of electrons in the fragment
-            ne = np.trace(onebody_rdm[np.ix_(range(len(fragment)), range(len(fragment)))])
-            number_of_electrons += ne
-            if self.kwargs['verbose']:
-                print(f"Fragment {i}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
-            if self.kwargs['PBC']:
-                total_energy*= len(self.fragments)
-                number_of_electrons*= len(self.fragments)
-                break
-        self.total_energies.append(total_energy)
+        if self.kwargs["PBC"]:
+            energy, number_of_electrons =  self.singleshot_PBC(mu)
+        elif self.kwargs["process_mode"] == "multiprocess":
+            # energy, number_of_electrons = self.singleshot_multiprocess(mu)
+            energy, number_of_electrons = self.singleshot_joblib(mu)
+        elif self.kwargs["process_mode"] == "threading" or self.kwargs["process_mode"] == "default":
+            energy, number_of_electrons = self.singleshot_threading(mu)
         if self.kwargs['verbose']:
-            print(f"Total energy: {total_energy:.5f}, Number of electrons: {number_of_electrons:.5f}")
+            print(f"Total energy: {energy:.5f}, Number of electrons: {number_of_electrons:.5f}")
             print("---------------------")
+        self.total_energies.append(energy)
+        
+        return energy, number_of_electrons
+    
+    def singleshot_PBC(self, mu: float):
+        """
+        Perform a single-shot DMET calculation with periodic boundary conditions (PBC).
+
+        Args:
+            mu (float): The chemical potential.
+
+        Returns:
+            Tuple[float, float]:
+                - Total energy (float)
+                - Number of electrons (float)
+
+        Main Concept:
+            Similar to `singleshot`, but assumes periodic boundary conditions.
+
+        Math Detail:
+            The total energy and electron count are computed as in `singleshot`, but with PBC considerations.
+        """
+        fragment = self.fragments[0]
+        fragmentHamiltonian = self.fragment_hamiltonians[0]
+        fragmentEnergy, ne = self.get_fragment_energy_and_number_of_electrons(fragment, fragmentHamiltonian, mu)
+        total_energy = fragmentEnergy * len(self.fragments)
+        number_of_electrons = ne * len(self.fragments)
+        return total_energy, number_of_electrons
+    
+    def singleshot_threading(self, mu: float):
+        """
+        Perform a single-shot DMET calculation using threading for parallel processing.
+
+        Args:
+            mu (float): The chemical potential.
+
+        Returns:
+            Tuple[float, float]:
+                - Total energy (float)
+                - Number of electrons (float)
+
+        Main Concept:
+            Similar to `singleshot`, but uses threading to compute fragment energies in parallel.
+
+        Math Detail:
+            The total energy and electron count are computed as in `singleshot`, but with parallel processing.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+        total_energy = 0.0
+        number_of_electrons = 0
+        with ThreadPoolExecutor(max_workers=self.kwargs['number_of_workers']) as executor:
+            futures = [executor.submit(self.get_fragment_energy_and_number_of_electrons, fragment, fragmentHamiltonian, mu) for fragment, fragmentHamiltonian in zip(self.fragments, self.fragment_hamiltonians)]
+            for future in futures:
+                fragmentEnergy, ne = future.result()
+                total_energy += fragmentEnergy
+                number_of_electrons += ne
+        return total_energy, number_of_electrons
+    
+    
+    def singleshot_joblib(self, mu: float):
+        from joblib import Parallel, delayed
+        results = Parallel(n_jobs=self.kwargs['number_of_workers'])(
+            delayed(self.get_fragment_energy_and_number_of_electrons)(frag, ham, mu)
+            for frag, ham in zip(self.fragments, self.fragment_hamiltonians)
+        )
+        total_energy = sum(e for e, _ in results)
+        number_of_electrons = sum(ne for _, ne in results)
         return total_energy, number_of_electrons
 
+    def get_fragment_energy_and_number_of_electrons(self, fragment, fragmentHamiltonian, mu: float):
+        print(f"Calculating energy for fragment {fragment} with chemical potential {mu}")
+        number_of_orbitals = max(fragmentHamiltonian.onebody_terms.shape[0], fragmentHamiltonian.twobody_terms.shape[0])
+        multiplier_hamiltonian = self.get_multiplier_hamiltonian(mu, fragment)
+        fragment_energy, onebody_rdm, twobody_rdm = self.solve_fragment(fragmentHamiltonian, multiplier_hamiltonian, number_of_orbitals=number_of_orbitals,fragment_length=len(fragment))
+        # calculate the number of electrons in the fragment
+        ne = np.trace(onebody_rdm[np.ix_(range(len(fragment)), range(len(fragment)))])
+        if self.kwargs['verbose']:
+            print(f"Fragment {fragment}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
+        return fragment_energy, ne
+    
     def run(self, mu0: float = None, mu1: float = None):
         """
         Perform a self-consistent DMET calculation to find the chemical potential.
