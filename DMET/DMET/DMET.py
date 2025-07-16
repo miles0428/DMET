@@ -315,8 +315,8 @@ class DMET:
         return total_energy, number_of_electrons
 
     def get_fragment_energy_and_number_of_electrons(self, fragment, fragmentHamiltonian, mu: float):
-        print(f"Calculating energy for fragment {fragment} with chemical potential {mu}")
         number_of_orbitals = max(fragmentHamiltonian.onebody_terms.shape[0], fragmentHamiltonian.twobody_terms.shape[0])
+        print(f"Calculating energy for fragment {fragment} with chemical potential {mu}, number of orbitals {number_of_orbitals}")
         multiplier_hamiltonian = self.get_multiplier_hamiltonian(mu, fragment)
         fragment_energy, onebody_rdm, twobody_rdm = self.solve_fragment(fragmentHamiltonian, multiplier_hamiltonian, number_of_orbitals=number_of_orbitals,fragment_length=len(fragment))
         # calculate the number of electrons in the fragment
