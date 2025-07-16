@@ -5,63 +5,32 @@ DMET (Density Matrix Embedding Theory) is a quantum embedding method for solving
 
 ## Installation
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-repo/DMET-Hubbard.git
-   cd DMET
-   ```
-
-2. Install the package:
-   ```bash
-   python setup.py install
-   ```
-
-## Usage
-
-### Running Tests
-To ensure everything is working correctly, run the test suite:
+You can install directly from GitHub:
 ```bash
-python -m unittest discover tests
+pip install git+https://github.com/miles0428/DMET.git
 ```
 
-## Core Classes and Functions in the DMET Package
+Or clone the repository manually:
+```bash
+git clone https://github.com/miles0428/DMET.git
+cd DMET
+pip install .
+```
 
-### DMET.DMET
-- **Class `DMET`**: The main class for performing Density Matrix Embedding Theory (DMET) calculations.
-  - **Attributes**:
-    - `problem_formulation`: The problem formulation object containing the system's Hamiltonian and other properties.
-    - `fragments`: A list of fragments for the embedding calculations.
-    - `problem_solver`: The solver used to solve the fragment problems.
-    - `verbose`: A flag for detailed output.
-  - **Methods**:
-    - `run()`: Executes the DMET self-consistent loop to compute the ground state energy.
+## Getting Started
 
-### DMET.ProblemFormulation
-- **Class `ProblemFormulation`**: Represents the problem formulation for the DMET calculation.
-  - **Attributes**:
-    - `one_body_problem_formulation`: The one-body Hamiltonian formulation.
-    - `many_body_problem_formulation`: The many-body Hamiltonian formulation.
+To get started, please refer to the Jupyter notebooks in the `examples/` directory:
+- `ProblemFormulation.ipynb`: Introduction to problem formulation and Hamiltonian construction.
+- `ProblemSolver.ipynb`: How to solve quantum many-body problems and use solvers in DMET.
+- `DMET_Hubbard.ipynb`: Full DMET workflow for the Hubbard model.
 
-### DMET.ProblemSolver.ClassicalEigenSolver
-- **Class `EigenSolver`**: A classical eigenvalue solver for solving the fragment problems.
-  - **Methods**:
-    - `solve(fragment_hamiltonian)`: Solves the given fragment Hamiltonian and returns the energy and reduced density matrices.
-
-### DMET.ProblemFormulation.Hubbard
-- **Class `OneBodyHubbardFormulation`**: Represents the one-body formulation of the Hubbard model.
-  - **Attributes**:
-    - `L`: The number of lattice sites.
-    - `t`: The hopping parameter.
-    - `number_of_electrons`: The number of electrons in the system.
-
-- **Class `ManyBodyHubbardFormulation`**: Represents the many-body formulation of the Hubbard model.
-  - **Attributes**:
-    - `L`: The number of lattice sites.
-    - `t`: The hopping parameter.
-    - `U`: The on-site interaction strength.
+These notebooks provide step-by-step instructions and code examples for using DMET and its modules.
 
 ## Contributing
 Feel free to submit issues or pull requests to improve the project.
+
+## Author
+This repository is maintained by Yu-Cheng Chung and Ssu-Yi Chen.
 
 ## License
 This project is licensed under the Apache License 2.0.
