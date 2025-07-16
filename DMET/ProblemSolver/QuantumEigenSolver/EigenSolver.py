@@ -14,11 +14,10 @@ class EigenSolver(ProblemSolver):
                 return func(*args,**kwargs)
             return wrapper
         return decorator
-    
     @with_default_kwargs({'async_observe' : False})
     def __init__(self, depth = 2, **simulate_options):
-        import cudaq
         super().__init__()
+        import cudaq
         self.i = 0
         self.depth = depth
         self.num_qpus = cudaq.get_target().num_qpus()
@@ -30,6 +29,7 @@ class EigenSolver(ProblemSolver):
               number_of_electrons: int, **kwargs):
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
+        import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
         def make_ansatz(n_qubits, number_of_electrons=None, depth = 1):
@@ -181,7 +181,6 @@ if __name__ == "__main__":
     molecular_hamiltonian = molecule.get_molecular_hamiltonian()
     H = get_fermion_operator(molecular_hamiltonian)
     solver = EigenSolver()
-    print('aaaa')
     energy, rdm1, rdm2 = solver.solve(H, number_of_orbitals=4, number_of_electrons=2)
     print("Energy:", energy)
     print("1-RDM:\n", rdm1)
