@@ -19,6 +19,7 @@ class EigenSolver(ProblemSolver):
     @with_default_kwargs({'async_observe' : False})
     def __init__(self, depth = 2, **simulate_options):
         super().__init__()
+        self.i = 0
         self.depth = depth
         self.num_qpus = cudaq.get_target().num_qpus()
         self.simulate_options = simulate_options
@@ -66,7 +67,8 @@ class EigenSolver(ProblemSolver):
                 energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
 
             if self.simulate_options["async_observe"] == True:
-                energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, 0%self.num_qpus).expectation()
+                energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, self.i % self.num_qpus).expectation()
+                self.i += 1
                 energy = energy.get()
             
             return energy.real
@@ -101,7 +103,7 @@ class EigenSolver(ProblemSolver):
         from openfermion.transforms import jordan_wigner
         import cudaq
         one_rdm = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
-        i = 0
+
         vals = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
 
         for p in range(number_of_orbitals):
@@ -112,8 +114,8 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == False:
                     vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
                 if self.simulate_options["async_observe"] == True:
-                    vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, i % self.num_qpus).expectation()
-                    i += 1
+                    vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, self.i % self.num_qpus).expectation()
+                    self.i += 1
 
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
@@ -129,7 +131,6 @@ class EigenSolver(ProblemSolver):
         vals = np.zeros((number_of_orbitals, number_of_orbitals,
                         number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
 
-        i = 0
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
                 for r in range(number_of_orbitals):
@@ -142,8 +143,8 @@ class EigenSolver(ProblemSolver):
                         if self.simulate_options["async_observe"] == False:
                             vals[p][q][r][s] = cudaq.observe(kernel, spin_op, opt_params).expectation()
                         if self.simulate_options["async_observe"] == True:
-                            vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, i % self.num_qpus).expectation()
-                            i += 1
+                            vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, self.i % self.num_qpus).expectation()
+                            self.i += 1
 
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
