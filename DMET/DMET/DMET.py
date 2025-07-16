@@ -45,7 +45,7 @@ class DMET:
         # Check if all lattice sites are in the fragment
         if not self.is_all_lattice_sites_in_fragment(fragments):
             raise ValueError("Not all lattice sites are included in the fragment.")
-        
+     
     def get_projectors(self, reorder_idxs: Union[np.ndarray, None] = None):
         """
         Generate the projection operators for each fragment.
@@ -101,7 +101,7 @@ class DMET:
             hamiltonian += FermionOperator(f"{i}^ {i}", mu)
         # print(f"Fragment {fragment}: Chemical potential Hamiltonian: {hamiltonian}")
         return hamiltonian
-        
+    
     def get_fragment_hamiltonians(self):
         """
         Construct the effective Hamiltonians for all fragments.
@@ -127,6 +127,7 @@ class DMET:
         print("Calculating fragment Hamiltonians...")
         for i,projector in tqdm(enumerate(projectors), total=len(projectors)):
             projector_conjugate = np.conjugate(projector.T)
+            
             # check if the projector is unitary
             if not np.allclose(np.eye(projector.shape[1]), projector_conjugate @ projector, atol=1e-5):
                 print(projector @ projector_conjugate)
@@ -136,9 +137,13 @@ class DMET:
             # print(f"Fragment {i}: Reorder indices: {reorder_idx}")
             fragment_length = len(self.fragments[i])
             reorder_onebody_terms = onebody_terms[np.ix_(reorder_idx, reorder_idx)]
-            reorder_twobody_terms = twobody_terms[np.ix_(reorder_idx, reorder_idx, reorder_idx, reorder_idx)]
+            frag_idx = reorder_idx[:fragment_length]
+            embedded_twobody_terms = twobody_terms[np.ix_(
+                frag_idx, frag_idx, frag_idx, frag_idx
+            )]
+            # reorder_twobody_terms = twobody_terms[np.ix_(reorder_idx, reorder_idx, reorder_idx, reorder_idx)]
             embedded_onebody_terms = projector_conjugate @ reorder_onebody_terms @ projector
-            embedded_twobody_terms = reorder_twobody_terms[np.ix_(np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length))]
+            # embedded_twobody_terms = reorder_twobody_terms[np.ix_(np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length), np.arange(fragment_length))]
             embedded_hamiltonian = FragmentHamiltonian(embedded_onebody_terms, embedded_twobody_terms,number_of_electrons= num_electrons[i])
             embedded_hamiltonians.append(embedded_hamiltonian)
             if self.kwargs['PBC']:

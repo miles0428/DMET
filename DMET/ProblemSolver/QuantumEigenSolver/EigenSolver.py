@@ -1,4 +1,3 @@
-import cudaq
 import numpy as np
 from openfermion.transforms import jordan_wigner
 from openfermion import FermionOperator
@@ -8,6 +7,7 @@ from scipy.optimize import minimize
 
 class EigenSolver(ProblemSolver):
     def __init__(self, depth):
+        import cudaq
         super().__init__()
         self.depth = depth
 

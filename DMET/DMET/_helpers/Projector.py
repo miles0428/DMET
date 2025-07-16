@@ -21,7 +21,6 @@ def get_projector_matrix(rdm: np.ndarray, fragment: np.ndarray, reorder_idx:np.n
         The DMET embedding projector onto the fragment + bath space.
     """
     number_of_occupations = np.trace(rdm)
-    # print(f"Number of occupations: {number_of_occupations}")
     number_of_occupations = int(np.round(number_of_occupations))
     rdm = rdm[np.ix_(reorder_idx, reorder_idx)]
     shape = rdm.shape
@@ -29,28 +28,19 @@ def get_projector_matrix(rdm: np.ndarray, fragment: np.ndarray, reorder_idx:np.n
     P_identity = np.eye(shape[0],length)
     rdm_bath = rdm[length:, length:]
     eigvals, eigvecs = np.linalg.eigh(rdm_bath)
-    # count number of eigenvalues equal to 1
     num_one = np.sum(np.isclose(eigvals, 1, atol=threshold))
-    # print(f"Number of eigenvalues equal to 1: {num_one}")
     num_one = int(np.round(num_one))
     number_of_embedded_electrons = number_of_occupations - num_one
-    # print(f"Number of embedded electrons: {number_of_embedded_electrons}")
     idx = np.abs(eigvals-1).argsort()
     eigvals = eigvals[idx]
-    # print(f"Eigenvalues of the bath RDM: {eigvals}")
     eigvecs = eigvecs[:, idx]
     number_of_bath_orbitals = np.sum((eigvals > threshold) & (eigvals < 1 - threshold))
     bath_orbital_indices = np.where((eigvals > threshold) & (eigvals < 1 - threshold))[0]
     eigvals = eigvals[bath_orbital_indices]
     eigvecs = eigvecs[:, bath_orbital_indices]
-    # if number_of_bath_orbitals > length:
-    #     eigvals = eigvals[:length]
-    #     eigvecs = eigvecs[:,:length]
-    #     number_of_bath_orbitals = length
     Pbath = np.zeros((shape[0],number_of_bath_orbitals), dtype=complex)
     Pbath[length:, :] = eigvecs
     Pbath[:length, :] = np.zeros((length,number_of_bath_orbitals), dtype=complex)
-
     P=np.concatenate((P_identity, Pbath), axis=1)
     assert np.allclose(P.T.conj() @ P, np.eye(P.shape[1]), atol=1e-10), "Projector matrix is not orthonormal"  
 
@@ -83,73 +73,3 @@ def get_projector_reorder_idxs(fragments: list, rdm_length : int) -> list:
         reorder_idxs.append(np.concatenate((frag, rest)))
     return reorder_idxs
 
-# def get_projector_matrix(rdm: np.ndarray,
-#                          fragment: np.ndarray,
-#                          reorder_idx: np.ndarray,
-#                          threshold: float = 1e-5) -> np.ndarray:
-#     """
-#     Generate the projector matrix for a given fragment.
-
-#     Args:
-#         onebody_rdm (np.ndarray): The one-body reduced density matrix.
-#         fragment (np.ndarray): The indices of the fragment.
-#         reorder_idx (np.ndarray): The reordering indices for the orbitals.
-#         bath_threshold (float): The threshold for bath orbitals.
-
-#     Returns:
-#         np.ndarray: The projector matrix for the fragment.
-
-#     Main Concept:
-#         Constructs a projector matrix to embed the fragment into the full system.
-
-#     Math Detail:
-#         The projector matrix is computed as:
-#             P = \sum_{i \in fragment} |i><i|
-#         where |i> are the basis states of the fragment.
-#     """
-#     # 1. Reorder the RDM so that fragment orbitals are first
-#     rdm_full = rdm[np.ix_(reorder_idx, reorder_idx)]
-#     M = rdm_full.shape[0]
-#     f = len(fragment)
-
-#     # 2. Partition the RDM
-#     gamma_ff = rdm_full[:f, :f]
-#     gamma_fe = rdm_full[:f, f:]
-#     gamma_ef = rdm_full[f:, :f]
-
-#     # 3. Solve eigenproblem for coupling
-#     #    C = gamma_ef (shape (M-f, f))
-#     C = gamma_ef
-#     CCt = C @ C.T
-#     occvals, U = np.linalg.eigh(CCt)
-#     # sort descending
-#     idx = np.argsort(occvals)[::-1]
-#     occvals = occvals[idx]
-#     U = U[:, idx]
-
-#     # 4. Select bath orbitals by occupation threshold
-#     mask = (occvals > threshold) & (occvals < 1 - threshold)
-#     occvals = occvals[mask]
-#     U = U[:, mask]
-#     b = U.shape[1]
-
-#     # 5. Construct bath orbitals on full space: b_i = (1/sqrt(lambda_i)) * gamma_fe @ u_i
-#     baths = []
-#     for i in range(b):
-#         lam = occvals[i]
-#         u = U[:, i]
-#         # environment->fragment coupling gives bath amplitudes on fragment space
-#         coeff_f = (gamma_fe @ u) / np.sqrt(lam)
-#         # build full-space vector
-#         bi = np.zeros(M, dtype=complex)
-#         bi[:f] = coeff_f
-#         bi[f:] = u
-#         baths.append(bi)
-#     B = np.column_stack(baths) if b > 0 else np.zeros((M, 0), dtype=complex)
-
-#     # 6. Stack fragment identity and bath orbitals
-#     P0 = np.hstack([np.eye(M, f, dtype=complex), B])
-
-#     # 7. Orthonormalize via QR
-#     Q, _ = np.linalg.qr(P0)
-#     return Q
