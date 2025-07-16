@@ -7,9 +7,23 @@ from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 
 class EigenSolver(ProblemSolver):
-    def __init__(self, depth):
+    def with_default_kwargs(defaults):
+        def decorator(func):
+            def wrapper(*args,**kwargs):
+                for key, value in defaults.items():
+                    kwargs.setdefault(key, value)
+                return func(*args,**kwargs)
+            return wrapper
+        return decorator
+    
+    @with_default_kwargs({'async_observe' : False})
+    def __init__(self, depth = 2, **simulate_options):
         super().__init__()
         self.depth = depth
+        self.num_qpus = cudaq.get_target().num_qpus()
+        self.simulate_options = simulate_options
+        if not(self.num_qpus > 1):
+            self.simulate_options["async_observe"] = False
 
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
               number_of_electrons: int, **kwargs):
@@ -46,10 +60,17 @@ class EigenSolver(ProblemSolver):
             return kernel, num_params
 
         kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth)
+
         def cost_function(opt_params):
-            energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
+            if self.simulate_options["async_observe"] == False:
+                energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
+
+            if self.simulate_options["async_observe"] == True:
+                energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, 0%self.num_qpus).expectation()
+                energy = energy.get()
+            
             return energy.real
-        
+
         # Step 1: Optimize the ansatz parameters
         initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
 
@@ -79,18 +100,36 @@ class EigenSolver(ProblemSolver):
         from openfermion import FermionOperator
         from openfermion.transforms import jordan_wigner
         import cudaq
-
         one_rdm = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
+        i = 0
+        vals = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
+
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
                 # Hermitian symmetrization
                 op = FermionOperator(f"{p}^ {q}") + FermionOperator(f"{q}^ {p}")
                 spin_op = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(op)))
-                val = cudaq.observe(kernel, spin_op, opt_params).expectation()
+                if self.simulate_options["async_observe"] == False:
+                    vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
+                if self.simulate_options["async_observe"] == True:
+                    vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, i % self.num_qpus).expectation()
+                    i += 1
+
+        for p in range(number_of_orbitals):
+            for q in range(number_of_orbitals):
+                if self.simulate_options["async_observe"] == False:
+                    val = vals[p][q]
+                if self.simulate_options["async_observe"] == True:
+                    val = vals[p][q].get()
                 one_rdm[p, q] = val/2
 
         two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
                             number_of_orbitals, number_of_orbitals), dtype=np.complex128)
+
+        vals = np.zeros((number_of_orbitals, number_of_orbitals,
+                        number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
+
+        i = 0
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
                 for r in range(number_of_orbitals):
@@ -100,8 +139,21 @@ class EigenSolver(ProblemSolver):
                         op2 = FermionOperator(f"{r}^ {s}^ {q} {p}")
                         op = op1 + op2
                         spin_op = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(op)))
-                        val = cudaq.observe(kernel, spin_op, opt_params).expectation()
-                        two_rdm[p, r, q, s] = val/2
+                        if self.simulate_options["async_observe"] == False:
+                            vals[p][q][r][s] = cudaq.observe(kernel, spin_op, opt_params).expectation()
+                        if self.simulate_options["async_observe"] == True:
+                            vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, i % self.num_qpus).expectation()
+                            i += 1
+
+        for p in range(number_of_orbitals):
+            for q in range(number_of_orbitals):
+                for r in range(number_of_orbitals):
+                    for s in range(number_of_orbitals):
+                        if self.simulate_options["async_observe"] == False:
+                            val = vals[p][q][r][s]
+                        if self.simulate_options["async_observe"] == True:
+                            val = vals[p][q][r][s].get()
+                        two_rdm[p, q, r, s] = val / 2
 
         return one_rdm, two_rdm
 
