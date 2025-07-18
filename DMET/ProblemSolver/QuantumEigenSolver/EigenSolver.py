@@ -67,10 +67,10 @@ class EigenSolver(ProblemSolver):
                 energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
 
             if self.simulate_options["async_observe"] == True:
-                energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus).expectation()
+                energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus)
                 self.i += 1
                 print("self.i", self.i)
-                energy = energy.get()
+                energy = energy.get().expectation()
             
             return energy.real
 
@@ -115,7 +115,7 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == False:
                     vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
                 if self.simulate_options["async_observe"] == True:
-                    vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus).expectation()
+                    vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                     self.i += 1
 
         for p in range(number_of_orbitals):
@@ -123,7 +123,7 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == False:
                     val = vals[p][q]
                 if self.simulate_options["async_observe"] == True:
-                    val = vals[p][q].get()
+                    val = vals[p][q].get().expectation()
                 one_rdm[p, q] = val/2
 
         two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
@@ -144,7 +144,7 @@ class EigenSolver(ProblemSolver):
                         if self.simulate_options["async_observe"] == False:
                             vals[p][q][r][s] = cudaq.observe(kernel, spin_op, opt_params).expectation()
                         if self.simulate_options["async_observe"] == True:
-                            vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus).expectation()
+                            vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                             self.i += 1
 
         for p in range(number_of_orbitals):
@@ -154,7 +154,7 @@ class EigenSolver(ProblemSolver):
                         if self.simulate_options["async_observe"] == False:
                             val = vals[p][q][r][s]
                         if self.simulate_options["async_observe"] == True:
-                            val = vals[p][q][r][s].get()
+                            val = vals[p][q][r][s].get().expectation()
                         two_rdm[p, r, q, s] = val / 2
 
         return one_rdm, two_rdm
