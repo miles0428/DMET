@@ -115,13 +115,32 @@ class EigenSolver(ProblemSolver):
 
 
 if __name__ == "__main__":
+    # Example usage
+    import openfermion
+    import openfermionpyscf
+    from openfermion.transforms import jordan_wigner, get_fermion_operator
+    import matplotlib.pyplot as plt
+    from scipy.optimize import minimize
+    import numpy as np
+    import pickle
     eigen_solver = EigenSolver()
     # Test with a 4-orbital 2-body operator (adjust as needed)
-    hamiltonian = FermionOperator('0^ 1^ 2 3', 1.0)
-    sparse_ham = eigen_solver._transform_hamiltonian_to_matrix(hamiltonian, 4 )
-    print("Sparse Hamiltonian shape:", sparse_ham.shape)
-
-    energy, rdm1, rdm2 = eigen_solver.solve(hamiltonian, 4,2)
-    print("Ground state energy:", energy)
+    # H = FermionOperator("0^ 1", 1.0) + FermionOperator("1^ 0", 1.0) + FermionOperator("0^ 1 2 3^", -.5) + FermionOperator("1^ 0 3 2^", -.5)
+    geometry = [('H', (0, 0, 0.0)),
+                ('H', (0, 0, 0.74))]
+    basis = 'sto3g'
+    multiplicity = 1
+    charge = 0
+    molecule = openfermionpyscf.run_pyscf(
+        openfermion.MolecularData(geometry, basis, multiplicity, charge))
+    molecular_hamiltonian = molecule.get_molecular_hamiltonian()
+    H = get_fermion_operator(molecular_hamiltonian)
+    solver = EigenSolver()
+    print('aaaa')
+    energy, rdm1, rdm2 = solver.solve(H, number_of_orbitals=4, number_of_electrons=2)
+    print("Energy:", energy)
     print("1-RDM:\n", rdm1)
-    print("2-RDM shape:", rdm2.shape)
+    print("2-RDM shape:", rdm2)
+    with open("array.pkl", "wb") as f:
+        pickle.dump(rdm2, f)
+
