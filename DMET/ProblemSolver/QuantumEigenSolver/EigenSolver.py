@@ -69,7 +69,7 @@ class EigenSolver(ProblemSolver):
             if self.simulate_options["async_observe"] == True:
                 energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus)
                 self.i += 1
-                print("self.i", self.i)
+                #print("self.i", self.i)
                 energy = energy.get().expectation()
             
             return energy.real
