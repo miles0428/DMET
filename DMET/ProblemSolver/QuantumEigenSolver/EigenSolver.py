@@ -15,7 +15,8 @@ class EigenSolver(ProblemSolver):
                 return func(*args,**kwargs)
             return wrapper
         return decorator
-    @with_default_kwargs({'async_observe' : False})
+    
+    @with_default_kwargs({'async_observe' : False, 'mode' : 'classical'})
     def __init__(self, depth = 2, **simulate_options):
         super().__init__()
         import cudaq
@@ -59,8 +60,18 @@ class EigenSolver(ProblemSolver):
                         cx(qubits[(i+1) % n_qubits], qubits[(i) % n_qubits])
                         param_idx += 2
             num_params = 2 * n_qubits * depth
-            return kernel, num_params
-
+            
+            @cudaq.kernel
+            def kernel_no_params():
+                qubits = cudaq.qvector(n_qubits)
+                for i in range(number_of_electrons):
+                    x(qubits[i])
+            
+            if self.simulate_options["mode"] in ['classical','cudaq-vqe']:
+                kernel_r = kernel_no_params
+            else:
+                kernel_r = kernel
+            return kernel_r, num_params
         kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth)
 
         def cost_function(opt_params):
@@ -77,16 +88,44 @@ class EigenSolver(ProblemSolver):
 
         # Step 1: Optimize the ansatz parameters
         initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
-
-        result = minimize(
-            cost_function,
-            initial_params,
-            method='COBYLA',
-            options={'rhobeg': 0.5, 'maxiter': 500}
-        )
-
-        opt_params = result.x
-        energy = result.fun
+        if self.simulate_options["mode"] == "classical":
+            result = minimize(
+                cost_function,
+                initial_params,
+                method='COBYLA',
+                options={'rhobeg': 0.5, 'maxiter': 500}
+            )
+            opt_params = result.x
+            energy = result.fun
+        
+        elif self.simulate_options["mode"] == "cudaq-vqe":
+            optimizer = cudaq.optimizers.COBYLA()
+            energy, opt_params = cudaq.vqe(
+                kernel,
+                cudaq_ham,
+                optimizer,
+                len(initial_params),
+            )
+        
+        # elif self.simulate_options["mode"] == "cudaq-adapt-vqe":
+        #     import cudaq_solvers 
+            
+        #     pool = cudaq_solvers.get_operator_pool(
+        #         "spin_complement_gsd",
+        #         num_orbitals = number_of_orbitals,
+        #     )
+        #     # print(f"Pool size: {len(pool)}")
+        #     # print(f"Pool: {pool}")
+        #     print('sdjklsajdklas')
+        #     energy, params, operators = cudaq_solvers.adapt_vqe(
+        #         kernel,
+        #         cudaq_ham,
+        #         pool
+        #     )
+        #     print('dssds')
+        #     print(operators)
+            
+        
         # Step 4: Compute 1-RDM
         one_rdm, two_rdm = self.get_rdm(kernel, opt_params, number_of_orbitals)
         return energy, one_rdm, two_rdm
