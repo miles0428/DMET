@@ -173,39 +173,39 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
 
         return H, onebody_terms, twobody_terms
 
+if __name__=="__main__":
+    # --- 系統參數 ---
+    N_cells = 2         # 四個格點
+    t1 = 1.0            # SSH 模型 t1 hopping
+    t2 = 0.5            # SSH 模型 t2 hopping
+    U = 2.0             # On-site interaction
+    number_of_electrons = 4
 
-# --- 系統參數 ---
-N_cells = 2         # 四個格點
-t1 = 1.0            # SSH 模型 t1 hopping
-t2 = 0.5            # SSH 模型 t2 hopping
-U = 2.0             # On-site interaction
-number_of_electrons = 4
+    # --- One-body problem ---
+    onebody = OneBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, number_of_electrons=number_of_electrons)
+    H = onebody.get_hamiltonian()
+    print("H:", H.real)
+    e_ground, wavefunction = onebody.get_slater(number_of_electrons)
+    density_matrix = onebody.get_density_matrix()
 
-# --- One-body problem ---
-onebody = OneBodyHubbardFormulation(N_cells=N_cells, t1=t1, t2=t2, number_of_electrons=number_of_electrons)
-H = onebody.get_hamiltonian()
-print("H:", H.real)
-e_ground, wavefunction = onebody.get_slater(number_of_electrons)
-density_matrix = onebody.get_density_matrix()
+    print("\n=== One-body SSH Hamiltonian ===")
+    print("One-body Ground Energy:", e_ground)
+    print("Density Matrix:\n", density_matrix)
 
-print("\n=== One-body SSH Hamiltonian ===")
-print("One-body Ground Energy:", e_ground)
-print("Density Matrix:\n", density_matrix)
+    # --- Many-body problem ---
+    manybody = ManyBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U=U)
+    H_manybody = manybody.H
 
-# --- Many-body problem ---
-manybody = ManyBodyHubbardFormulation(N_cells=N_cells, t1=t1, t2=t2, U=U)
-H_manybody = manybody.H
+    print("\n=== Many-body SSH-Hubbard Hamiltonian (terms count) ===")
+    print("Number of terms in FermionOperator:", len(H_manybody.terms))
 
-print("\n=== Many-body SSH-Hubbard Hamiltonian (terms count) ===")
-print("Number of terms in FermionOperator:", len(H_manybody.terms))
+    # --- 驗證 onebody_terms vs H ---
+    print("\nOne-body matrix (from Many-body Hamiltonian):")
+    print(manybody.onebody_terms)
 
-# --- 驗證 onebody_terms vs H ---
-print("\nOne-body matrix (from Many-body Hamiltonian):")
-print(manybody.onebody_terms)
+    # --- 驗證兩體項 ---
+    nonzero_twobody = np.nonzero(manybody.twobody_terms)
+    print("\nNon-zero twobody terms indices:", list(zip(*nonzero_twobody)))
 
-# --- 驗證兩體項 ---
-nonzero_twobody = np.nonzero(manybody.twobody_terms)
-print("\nNon-zero twobody terms indices:", list(zip(*nonzero_twobody)))
-
- 
     
+        
