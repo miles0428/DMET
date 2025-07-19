@@ -4,6 +4,7 @@ from openfermion import FermionOperator
 from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
+import time 
 
 class EigenSolver(ProblemSolver):
     def with_default_kwargs(defaults):
@@ -70,8 +71,8 @@ class EigenSolver(ProblemSolver):
                 energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus)
                 self.i += 1
                 #print("self.i", self.i)
+                time.sleep(0)  # pass the control to the event loop
                 energy = energy.get().expectation()
-            
             return energy.real
 
         # Step 1: Optimize the ansatz parameters
@@ -117,7 +118,7 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == True:
                     vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                     self.i += 1
-
+        time.sleep(0)  # pass the control to the event loop
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
                 if self.simulate_options["async_observe"] == False:
@@ -146,7 +147,7 @@ class EigenSolver(ProblemSolver):
                         if self.simulate_options["async_observe"] == True:
                             vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                             self.i += 1
-
+        time.sleep(0)  # pass the control to the event loop
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
                 for r in range(number_of_orbitals):
