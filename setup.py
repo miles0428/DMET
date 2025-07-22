@@ -21,7 +21,7 @@ class PyTest(TestCommand):
 setup(
     name="DMET-nolab",
 
-    version="0.1.13",
+    version="0.1.14",
 
     packages=find_packages(),  # Automatically find all packages
     install_requires=[
