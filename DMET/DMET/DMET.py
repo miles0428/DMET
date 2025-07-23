@@ -303,7 +303,6 @@ class DMET:
                 number_of_electrons += ne
         return total_energy, number_of_electrons
     
-    
     def singleshot_joblib(self, mu: float):
         from joblib import Parallel, delayed
         results = Parallel(n_jobs=self.kwargs['number_of_workers'])(
@@ -325,7 +324,7 @@ class DMET:
             print(f"Fragment {fragment}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
         return fragment_energy, ne
     
-    def run(self, mu0: float = None, mu1: float = None):
+    def run(self, mu0: float = None, mu1: float = None, singleshot: bool = False):
         """
         Perform a self-consistent DMET calculation to find the chemical potential.
 
@@ -360,6 +359,8 @@ class DMET:
         self.fragment_hamiltonians = self.get_fragment_hamiltonians()
         self.objective_buffer = {}
         objective_value = self.objective(mu0)
+        if singleshot:
+            return self.total_energies[-1]
         objective_value1 = self.objective(mu1)
         for _ in range(10):
             if objective_value * objective_value1 > 0:
