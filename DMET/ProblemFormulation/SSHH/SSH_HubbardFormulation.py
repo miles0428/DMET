@@ -53,7 +53,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
 
         for i in range(L):
             j = (i + 1) % L
-            t = t1 if i % 2 == 0 else t2
+            t = self.t1 if i % 2 == 0 else self.t2
 
             # spin up (spin=0)
             p_up = 2 * i + 0
