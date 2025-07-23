@@ -68,9 +68,9 @@ class EigenSolver(ProblemSolver):
                     x(qubits[i])
             
             if self.simulate_options["mode"] in ['classical','cudaq-vqe']:
-                kernel_r = kernel_no_params
+                kernel_r =  kernel
             else:
-                kernel_r = kernel
+                kernel_r = kernel_no_params
             return kernel_r, num_params
         kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth)
 
