@@ -53,7 +53,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
 
         for i in range(L):
             j = (i + 1) % L
-            t = t1 if i % 2 == 0 else t2
+            t = self.t1 if i % 2 == 0 else self.t2
 
             # spin up (spin=0)
             p_up = 2 * i + 0
@@ -109,7 +109,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
             where \psi is the wavefunction.
         """
         if self._wavefunction is None:
-            _, self._wavefunction = self.get_analytic_solution(self.number_of_electrons)
+            _, self._wavefunction = self.get_slater(self.number_of_electrons)
         return np.dot(self._wavefunction, self._wavefunction.conjugate().T).real.round(10)
 
 class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
