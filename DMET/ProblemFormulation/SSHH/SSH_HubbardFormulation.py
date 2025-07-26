@@ -59,7 +59,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
             else:
                 j = (i + 1) 
                 if j >= L:
-                    break #還沒修好
+                    break 
 
             t = self.t1 if i % 2 == 0 else self.t2
 
@@ -169,7 +169,7 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
             else:
                 j = (i + 1) 
                 if j >= self.L:
-                    break #還沒修好
+                    break 
             t = self.t1 if i % 2 == 0 else self.t2
             for spin in (0, 1):
                 p = 2 * i + spin
