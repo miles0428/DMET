@@ -3,7 +3,7 @@ import numpy as np
 from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
 
 class OneBodySSHHFormulation(OneBodyProblemFormulation):
-    def __init__(self, N_cells, t1, t2, number_of_electrons):
+    def __init__(self, N_cells, t1, t2, number_of_electrons, PBC):
         """
         Initialize the one-body Hubbard formulation.
 
@@ -25,6 +25,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         self.N_cells = N_cells
         self.t1 = t1
         self.t2 = t2
+        self.PBC = PBC
         self._wavefunction = None
         self.H = self.get_hamiltonian()
         self.number_of_electrons = number_of_electrons
@@ -52,7 +53,14 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         H = np.zeros((dim, dim), dtype=complex)
 
         for i in range(L):
-            j = (i + 1) % L
+
+            if self.PBC == True:
+                j = (i + 1) % L
+            else:
+                j = (i + 1) 
+                if j >= L:
+                    break #還沒修好
+
             t = self.t1 if i % 2 == 0 else self.t2
 
             # spin up (spin=0)
@@ -113,7 +121,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         return np.dot(self._wavefunction, self._wavefunction.conjugate().T).real.round(10)
 
 class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
-    def __init__(self, N_cells, t1, t2, U):
+    def __init__(self, N_cells, t1, t2, U, PBC):
         """
         Initialize the many-body SSH-Hubbard formulation.
 
@@ -136,6 +144,7 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
         self.t1 = t1
         self.t2 = t2
         self.U = U
+        self.PBC = PBC
         self.H, self.onebody_terms, self.twobody_terms = self.get_hamiltonian()
 
     def get_hamiltonian(self):
@@ -155,7 +164,12 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
 
         # Hopping terms
         for i in range(self.L):
-            j = (i + 1) % self.L
+            if self.PBC == 'True':
+                j = (i + 1) % self.L
+            else:
+                j = (i + 1) 
+                if j >= self.L:
+                    break #還沒修好
             t = self.t1 if i % 2 == 0 else self.t2
             for spin in (0, 1):
                 p = 2 * i + spin
@@ -182,7 +196,7 @@ if __name__=="__main__":
     number_of_electrons = 4
 
     # --- One-body problem ---
-    onebody = OneBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, number_of_electrons=number_of_electrons)
+    onebody = OneBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, number_of_electrons=number_of_electrons, PBC = True)
     H = onebody.get_hamiltonian()
     print("H:", H.real)
     e_ground, wavefunction = onebody.get_slater(number_of_electrons)
@@ -193,7 +207,7 @@ if __name__=="__main__":
     print("Density Matrix:\n", density_matrix)
 
     # --- Many-body problem ---
-    manybody = ManyBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U=U)
+    manybody = ManyBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U=U, PBC = True)
     H_manybody = manybody.H
 
     print("\n=== Many-body SSH-Hubbard Hamiltonian (terms count) ===")
