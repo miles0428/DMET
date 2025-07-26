@@ -164,7 +164,7 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
 
         # Hopping terms
         for i in range(self.L):
-            if self.PBC == 'True':
+            if self.PBC == True:
                 j = (i + 1) % self.L
             else:
                 j = (i + 1) 
