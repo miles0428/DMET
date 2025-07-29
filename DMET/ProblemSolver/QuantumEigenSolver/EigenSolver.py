@@ -5,6 +5,8 @@ from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 import time 
+import cudaq, cudaq_solvers as solvers 
+
 
 class EigenSolver(ProblemSolver):
     def with_default_kwargs(defaults):
@@ -67,7 +69,7 @@ class EigenSolver(ProblemSolver):
                 for i in range(number_of_electrons):
                     x(qubits[i])
             
-            if self.simulate_options["mode"] in ['classical','cudaq-vqe']:
+            if self.simulate_options["mode"] in ['classical','cudaq-vqe','cudaqx-vqe']:
                 kernel_r =  kernel
             else:
                 kernel_r = kernel_no_params
@@ -105,6 +107,17 @@ class EigenSolver(ProblemSolver):
                 cudaq_ham,
                 optimizer,
                 len(initial_params),
+            )
+
+        elif self.simulate_options["mode"] == "cudaqx-vqe":
+            #optimizer = cudaq.optimizers.COBYLA()
+            initialX = [np.random.random() for i in range(params)]
+            energy, opt_params, all_data = solvers.vqe(
+                kernel,
+                cudaq_ham, 
+                initialX, 
+                optimizer = minimize,
+                method='COBYLA'
             )
         
         # elif self.simulate_options["mode"] == "cudaq-adapt-vqe":
