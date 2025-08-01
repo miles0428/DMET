@@ -28,6 +28,8 @@ class EigenSolver(ProblemSolver):
         self.simulate_options = simulate_options
         if not(self.num_qpus > 1):
             self.simulate_options["async_observe"] = False
+        if self.simulate_options["hybridtest"] == True:
+            cudaq.set_target('nvidia', option='mgpu')
     
     def make_ansatz(self,n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
         assert number_of_electrons is not None, "number_of_electrons must be provided"
