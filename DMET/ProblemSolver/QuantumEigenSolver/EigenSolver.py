@@ -28,6 +28,45 @@ class EigenSolver(ProblemSolver):
         self.simulate_options = simulate_options
         if not(self.num_qpus > 1):
             self.simulate_options["async_observe"] = False
+    
+    def make_ansatz(self,n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
+        assert number_of_electrons is not None, "number_of_electrons must be provided"
+        assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
+        assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
+        
+        @cudaq.kernel
+        def kernel(params: list[float]):
+            qubits = cudaq.qvector(n_qubits)
+            for i in range(number_of_electrons):
+                x(qubits[i])
+            param_idx = 0
+            for j in range(depth):
+                for i in range(n_qubits):
+                    cx(qubits[(i+1) % n_qubits], qubits[i])
+                    rz(params[param_idx + 0], qubits[(i+1) % n_qubits])
+                    rz(np.pi, qubits[(i+1) % n_qubits])
+                    ry(params[param_idx + 1], qubits[(i+1) % n_qubits])
+                    ry(np.pi / 2, qubits[(i+1) % n_qubits])
+                    cx(qubits[i], qubits[(i+1) % n_qubits])
+                    ry(-np.pi / 2, qubits[(i+1) % n_qubits])
+                    ry(-params[param_idx + 1], qubits[(i+1) % n_qubits])
+                    rz(-np.pi, qubits[(i+1) % n_qubits])
+                    rz(-params[param_idx + 0], qubits[(i+1) % n_qubits])
+                    cx(qubits[(i+1) % n_qubits], qubits[(i) % n_qubits])
+                    param_idx += 2
+        num_params = 2 * n_qubits * depth
+        
+        @cudaq.kernel
+        def kernel_no_params():
+            qubits = cudaq.qvector(n_qubits)
+            for i in range(number_of_electrons):
+                x(qubits[i])
+        
+        if mode in ['classical','cudaq-vqe','cudaqx-vqe']:
+            kernel_r =  kernel
+        else:
+            kernel_r = kernel_no_params
+        return kernel_r, num_params
 
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
               number_of_electrons: int, **kwargs):
@@ -36,45 +75,8 @@ class EigenSolver(ProblemSolver):
         import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
-        def make_ansatz(n_qubits, number_of_electrons=None, depth = 1):
-            assert number_of_electrons is not None, "number_of_electrons must be provided"
-            assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
-            assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
-            
-            @cudaq.kernel
-            def kernel(params: list[float]):
-                qubits = cudaq.qvector(n_qubits)
-                for i in range(number_of_electrons):
-                    x(qubits[i])
-                param_idx = 0
-                for j in range(depth):
-                    for i in range(n_qubits):
-                        cx(qubits[(i+1) % n_qubits], qubits[i])
-                        rz(params[param_idx + 0], qubits[(i+1) % n_qubits])
-                        rz(np.pi, qubits[(i+1) % n_qubits])
-                        ry(params[param_idx + 1], qubits[(i+1) % n_qubits])
-                        ry(np.pi / 2, qubits[(i+1) % n_qubits])
-                        cx(qubits[i], qubits[(i+1) % n_qubits])
-                        ry(-np.pi / 2, qubits[(i+1) % n_qubits])
-                        ry(-params[param_idx + 1], qubits[(i+1) % n_qubits])
-                        rz(-np.pi, qubits[(i+1) % n_qubits])
-                        rz(-params[param_idx + 0], qubits[(i+1) % n_qubits])
-                        cx(qubits[(i+1) % n_qubits], qubits[(i) % n_qubits])
-                        param_idx += 2
-            num_params = 2 * n_qubits * depth
-            
-            @cudaq.kernel
-            def kernel_no_params():
-                qubits = cudaq.qvector(n_qubits)
-                for i in range(number_of_electrons):
-                    x(qubits[i])
-            
-            if self.simulate_options["mode"] in ['classical','cudaq-vqe','cudaqx-vqe']:
-                kernel_r =  kernel
-            else:
-                kernel_r = kernel_no_params
-            return kernel_r, num_params
-        kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth)
+        
+        kernel, params = self.make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
 
         def cost_function(opt_params):
             if self.simulate_options["async_observe"] == False:
@@ -120,23 +122,7 @@ class EigenSolver(ProblemSolver):
                 method='COBYLA'
             )
         
-        # elif self.simulate_options["mode"] == "cudaq-adapt-vqe":
-        #     import cudaq_solvers 
-            
-        #     pool = cudaq_solvers.get_operator_pool(
-        #         "spin_complement_gsd",
-        #         num_orbitals = number_of_orbitals,
-        #     )
-        #     # print(f"Pool size: {len(pool)}")
-        #     # print(f"Pool: {pool}")
-        #     print('sdjklsajdklas')
-        #     energy, params, operators = cudaq_solvers.adapt_vqe(
-        #         kernel,
-        #         cudaq_ham,
-        #         pool
-        #     )
-        #     print('dssds')
-        #     print(operators)
+
             
         
         # Step 4: Compute 1-RDM
@@ -170,6 +156,7 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == True:
                     vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                     self.i += 1
+                    
         time.sleep(0)  # pass the control to the event loop
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
@@ -199,6 +186,7 @@ class EigenSolver(ProblemSolver):
                         if self.simulate_options["async_observe"] == True:
                             vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                             self.i += 1
+                            
         time.sleep(0)  # pass the control to the event loop
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
