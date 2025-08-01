@@ -18,7 +18,7 @@ class EigenSolver(ProblemSolver):
             return wrapper
         return decorator
     
-    @with_default_kwargs({'async_observe' : False, 'mode' : 'classical'})
+    @with_default_kwargs({'async_observe' : False, 'mode' : 'classical', 'hybridtest': False})
     def __init__(self, depth = 2, **simulate_options):
         super().__init__()
         import cudaq
@@ -154,6 +154,8 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == False:
                     vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
                 if self.simulate_options["async_observe"] == True:
+                    if self.simulate_options["hybridtest"] == True:
+                        cudaq.set_target('nvidia', option='mqpu')
                     vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                     self.i += 1
                     
@@ -197,7 +199,8 @@ class EigenSolver(ProblemSolver):
                         if self.simulate_options["async_observe"] == True:
                             val = vals[p][q][r][s].get().expectation()
                         two_rdm[p, r, q, s] = val / 2
-
+        if self.simulate_options["hybridtest"] == True:
+            cudaq.set_target('nvidia', option='mgpu')
         return one_rdm, two_rdm
 
 
