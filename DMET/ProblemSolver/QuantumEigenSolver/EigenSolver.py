@@ -30,7 +30,7 @@ class EigenSolver(ProblemSolver):
             self.simulate_options["async_observe"] = False
         if self.simulate_options["hybridtest"] == True:
             cudaq.set_target('nvidia', option='mgpu')
-    '''
+    
     def make_ansatz(self,n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
         assert number_of_electrons is not None, "number_of_electrons must be provided"
         assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
@@ -69,7 +69,7 @@ class EigenSolver(ProblemSolver):
         else:
             kernel_r = kernel_no_params
         return kernel_r, num_params
-'''
+
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
               number_of_electrons: int, **kwargs):
         if not isinstance(hamiltonian, FermionOperator):
@@ -77,7 +77,8 @@ class EigenSolver(ProblemSolver):
         import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
-
+        
+        kernel, params = self.make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
 
         def cost_function(opt_params):
             if self.simulate_options["async_observe"] == False:
@@ -92,10 +93,8 @@ class EigenSolver(ProblemSolver):
             return energy.real
 
         # Step 1: Optimize the ansatz parameters
-          # Random initial parameters
+        initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
         if self.simulate_options["mode"] == "classical":
-            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
-            initial_params = [np.random.random() for i in range(params)]
             result = minimize(
                 cost_function,
                 initial_params,
@@ -107,9 +106,6 @@ class EigenSolver(ProblemSolver):
         
         elif self.simulate_options["mode"] == "cudaq-vqe":
             optimizer = cudaq.optimizers.COBYLA()
-            
-            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
-            initial_params = [np.random.random() for i in range(params)]
             energy, opt_params = cudaq.vqe(
                 kernel,
                 cudaq_ham,
@@ -118,24 +114,14 @@ class EigenSolver(ProblemSolver):
             )
 
         elif self.simulate_options["mode"] == "cudaqx-vqe":
-            import multiprocessing as mp
-            import copy
-            import copy
-            import dill as pickle
-            depth = copy.deepcopy(self.depth)
-            mode = copy.deepcopy(self.simulate_options["mode"])
-            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = depth, mode = mode)
-            initial_params = [np.random.random() for i in range(params)]
-            mp.set_start_method("spawn", force=True)
-            from cudaq_solvers import COBYLA
-
             #optimizer = cudaq.optimizers.COBYLA()
             initialX = [np.random.random() for i in range(params)]
             energy, opt_params, all_data = solvers.vqe(
                 kernel,
                 cudaq_ham, 
                 initialX, 
-                optimizer = COBYLA(),
+                optimizer = minimize,
+                method='COBYLA'
             )
         
 
@@ -218,45 +204,7 @@ class EigenSolver(ProblemSolver):
         if self.simulate_options["hybridtest"] == True:
             cudaq.set_target('nvidia', option='mgpu')
         return one_rdm, two_rdm
-    
-def make_ansatz(n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
-        assert number_of_electrons is not None, "number_of_electrons must be provided"
-        assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
-        assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
-        
-        @cudaq.kernel
-        def kernel(params: list[float]):
-            qubits = cudaq.qvector(n_qubits)
-            for i in range(number_of_electrons):
-                x(qubits[i])
-            param_idx = 0
-            for j in range(depth):
-                for i in range(n_qubits):
-                    cx(qubits[(i+1) % n_qubits], qubits[i])
-                    rz(params[param_idx + 0], qubits[(i+1) % n_qubits])
-                    rz(np.pi, qubits[(i+1) % n_qubits])
-                    ry(params[param_idx + 1], qubits[(i+1) % n_qubits])
-                    ry(np.pi / 2, qubits[(i+1) % n_qubits])
-                    cx(qubits[i], qubits[(i+1) % n_qubits])
-                    ry(-np.pi / 2, qubits[(i+1) % n_qubits])
-                    ry(-params[param_idx + 1], qubits[(i+1) % n_qubits])
-                    rz(-np.pi, qubits[(i+1) % n_qubits])
-                    rz(-params[param_idx + 0], qubits[(i+1) % n_qubits])
-                    cx(qubits[(i+1) % n_qubits], qubits[(i) % n_qubits])
-                    param_idx += 2
-        num_params = 2 * n_qubits * depth
-        
-        @cudaq.kernel
-        def kernel_no_params():
-            qubits = cudaq.qvector(n_qubits)
-            for i in range(number_of_electrons):
-                x(qubits[i])
-        
-        if mode in ['classical','cudaq-vqe','cudaqx-vqe']:
-            kernel_r =  kernel
-        else:
-            kernel_r = kernel_no_params
-        return kernel_r, num_params
+
 
 if __name__ == "__main__":
     # Example usage
