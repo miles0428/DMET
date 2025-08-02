@@ -127,14 +127,15 @@ class EigenSolver(ProblemSolver):
             kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = depth, mode = mode)
             initial_params = [np.random.random() for i in range(params)]
             mp.set_start_method("spawn", force=True)
+            from cudaq_solvers import COBYLA
+
             #optimizer = cudaq.optimizers.COBYLA()
             initialX = [np.random.random() for i in range(params)]
             energy, opt_params, all_data = solvers.vqe(
                 kernel,
                 cudaq_ham, 
                 initialX, 
-                optimizer = minimize,
-                method='COBYLA'
+                optimizer = COBYLA(),
             )
         
 
