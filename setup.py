@@ -20,7 +20,7 @@ class PyTest(TestCommand):
 
 setup(
     name="DMET-nolab",
-    version="0.1.16",
+    version="0.1.17",
     packages=find_packages(),  # Automatically find all packages
     install_requires=[
         "numpy",
