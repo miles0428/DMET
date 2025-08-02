@@ -77,9 +77,7 @@ class EigenSolver(ProblemSolver):
         import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
-        import copy
-        depth = copy.deepcopy(self.depth)
-        mode = copy.deepcopy(self.simulate_options["mode"])
+
 
         def cost_function(opt_params):
             if self.simulate_options["async_observe"] == False:
@@ -109,6 +107,7 @@ class EigenSolver(ProblemSolver):
         
         elif self.simulate_options["mode"] == "cudaq-vqe":
             optimizer = cudaq.optimizers.COBYLA()
+            
             kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
             initial_params = [np.random.random() for i in range(params)]
             energy, opt_params = cudaq.vqe(
@@ -121,7 +120,11 @@ class EigenSolver(ProblemSolver):
         elif self.simulate_options["mode"] == "cudaqx-vqe":
             import multiprocessing as mp
             import copy
-            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
+            import copy
+            import dill as pickle
+            depth = copy.deepcopy(self.depth)
+            mode = copy.deepcopy(self.simulate_options["mode"])
+            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = depth, mode = mode)
             initial_params = [np.random.random() for i in range(params)]
             mp.set_start_method("spawn", force=True)
             #optimizer = cudaq.optimizers.COBYLA()
