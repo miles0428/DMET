@@ -120,13 +120,14 @@ class EigenSolver(ProblemSolver):
 
         elif self.simulate_options["mode"] == "cudaqx-vqe":
             import multiprocessing as mp
+            import copy
             kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
             initial_params = [np.random.random() for i in range(params)]
             mp.set_start_method("spawn", force=True)
             #optimizer = cudaq.optimizers.COBYLA()
             initialX = [np.random.random() for i in range(params)]
             energy, opt_params, all_data = solvers.vqe(
-                kernel,
+                copy.deepcopy(kernel),
                 cudaq_ham, 
                 initialX, 
                 optimizer = minimize,
