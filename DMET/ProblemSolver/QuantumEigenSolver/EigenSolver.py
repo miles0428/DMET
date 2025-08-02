@@ -80,7 +80,6 @@ class EigenSolver(ProblemSolver):
         import copy
         depth = copy.deepcopy(self.depth)
         mode = copy.deepcopy(self.simulate_options["mode"])
-        kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
 
         def cost_function(opt_params):
             if self.simulate_options["async_observe"] == False:
@@ -97,6 +96,8 @@ class EigenSolver(ProblemSolver):
         # Step 1: Optimize the ansatz parameters
         initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
         if self.simulate_options["mode"] == "classical":
+            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
+
             result = minimize(
                 cost_function,
                 initial_params,
@@ -108,6 +109,8 @@ class EigenSolver(ProblemSolver):
         
         elif self.simulate_options["mode"] == "cudaq-vqe":
             optimizer = cudaq.optimizers.COBYLA()
+            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
+
             energy, opt_params = cudaq.vqe(
                 kernel,
                 cudaq_ham,
@@ -117,6 +120,8 @@ class EigenSolver(ProblemSolver):
 
         elif self.simulate_options["mode"] == "cudaqx-vqe":
             import multiprocessing as mp
+            kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
+
             mp.set_start_method("spawn", force=True)
             #optimizer = cudaq.optimizers.COBYLA()
             initialX = [np.random.random() for i in range(params)]
