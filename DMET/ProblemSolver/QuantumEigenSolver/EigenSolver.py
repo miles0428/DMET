@@ -114,6 +114,8 @@ class EigenSolver(ProblemSolver):
             )
 
         elif self.simulate_options["mode"] == "cudaqx-vqe":
+            import multiprocessing as mp
+            mp.set_start_method("spawn", force=True)
             #optimizer = cudaq.optimizers.COBYLA()
             initialX = [np.random.random() for i in range(params)]
             energy, opt_params, all_data = solvers.vqe(
