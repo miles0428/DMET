@@ -130,7 +130,7 @@ class EigenSolver(ProblemSolver):
             #optimizer = cudaq.optimizers.COBYLA()
             initialX = [np.random.random() for i in range(params)]
             energy, opt_params, all_data = solvers.vqe(
-                copy.deepcopy(kernel),
+                kernel,
                 cudaq_ham, 
                 initialX, 
                 optimizer = minimize,
