@@ -77,7 +77,9 @@ class EigenSolver(ProblemSolver):
         import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
-        
+        import copy
+        depth = copy.deepcopy(self.depth)
+        mode = copy.deepcopy(self.simulate_options["mode"])
         kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
 
         def cost_function(opt_params):
