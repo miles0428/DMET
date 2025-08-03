@@ -5,6 +5,7 @@ from typing import List,Union
 from openfermion import FermionOperator
 from ..ProblemSolver import ProblemSolver
 from tqdm import tqdm
+from datetime import datetime
 
 def with_default_kwargs(defaults):
     def decorator(func):
@@ -322,9 +323,20 @@ class DMET:
         ne = np.trace(onebody_rdm[np.ix_(range(len(fragment)), range(len(fragment)))])
         if self.kwargs['verbose']:
             print(f"Fragment {fragment}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
+        self.fragment_results.append({
+                            "shot": self.shot,
+                            "mu": mu,
+                            "fragment": fragment,
+                            "ne": ne,
+                            "fragment_energy": fragment_energy,
+                            "onebody_rdm": onebody_rdm,
+                            "twobody_rdm": twobody_rdm
+                        })
         return fragment_energy, ne
     
-    def run(self, mu0: float = None, mu1: float = None, singleshot: bool = False):
+    def run(self, mu0: float = None, mu1: float = None, singleshot: bool = False, filenameprefix = 'filename'):
+
+        
         """
         Perform a self-consistent DMET calculation to find the chemical potential.
 
@@ -346,7 +358,8 @@ class DMET:
         from scipy.optimize import newton
         from scipy.optimize import minimize_scalar
         from scipy.optimize import root_scalar
-            
+
+        self.fragment_results = []    
         mu0 = np.random.rand()[0] if mu0 is None else mu0
         mu1 = -np.random.rand()[0] if mu1 is None else mu1
         if mu0 == mu1:
@@ -387,7 +400,73 @@ class DMET:
             print(f"Total energy: {self.total_energies[-1]}")
         else:
             print("Failed to converge to a solution.")
+            
+        self.save_fragment_results(filename_prefix = filenameprefix)
+        
         return self.total_energies[-1]
+    def save_fragment_results(self, filename_prefix: str = "fragment_results"):
+        """
+        Group fragment results by shot and save to a timestamped .npz file.
+
+        Args:
+            filename_prefix (str): Prefix of the output filename (default = 'fragment_results').
+                                The final filename will be like: {prefix}_{timestamp}.npz
+
+        Format:
+        [
+        {
+            "shot": int,
+            "mu": float,
+            "fragments": [
+            {
+                "fragment": ndarray,
+                "ne": float,
+                "fragment_energy": float,
+                "onebody_rdm": ndarray,
+                "twobody_rdm": ndarray
+            },
+            ...
+            ]
+        },
+        ...
+        ]
+        """
+        from datetime import datetime
+
+        if not hasattr(self, "fragment_results") or not self.fragment_results:
+            print("No fragment results to save.")
+            return
+
+        # Group by shot number
+        grouped = {}
+        for item in self.fragment_results:
+            shot = item["shot"]
+            if shot not in grouped:
+                grouped[shot] = {
+                    "shot": shot,
+                    "mu": item["mu"],
+                    "fragments": []
+                }
+            grouped[shot]["fragments"].append({
+                "fragment": item["fragment"],
+                "ne": item["ne"],
+                "fragment_energy": item["fragment_energy"],
+                "onebody_rdm": item["onebody_rdm"],
+                "twobody_rdm": item["twobody_rdm"]
+            })
+
+        grouped_results = list(grouped.values())
+        results_array = np.array(grouped_results, dtype=np.object_)
+
+        # Construct final filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{filename_prefix}_{timestamp}.npz"
+
+        np.savez(filename, total_energy=self.total_energies[-1], fragment_results=results_array)
+        print(f"Results saved to {filename}")
+
+
+
 
     def objective(self, mu: float):
         """
