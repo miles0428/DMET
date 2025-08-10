@@ -6,6 +6,7 @@ from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 import time 
 import cudaq, cudaq_solvers as solvers 
+import spsa
 
 
 class EigenSolver(ProblemSolver):
@@ -42,21 +43,25 @@ class EigenSolver(ProblemSolver):
             for i in range(number_of_electrons):
                 x(qubits[i])
             param_idx = 0
+            
             for j in range(depth):
-                for i in range(n_qubits):
-                    cx(qubits[(i+1) % n_qubits], qubits[i])
-                    rz(params[param_idx + 0], qubits[(i+1) % n_qubits])
-                    rz(np.pi, qubits[(i+1) % n_qubits])
-                    ry(params[param_idx + 1], qubits[(i+1) % n_qubits])
-                    ry(np.pi / 2, qubits[(i+1) % n_qubits])
-                    cx(qubits[i], qubits[(i+1) % n_qubits])
-                    ry(-np.pi / 2, qubits[(i+1) % n_qubits])
-                    ry(-params[param_idx + 1], qubits[(i+1) % n_qubits])
-                    rz(-np.pi, qubits[(i+1) % n_qubits])
-                    rz(-params[param_idx + 0], qubits[(i+1) % n_qubits])
-                    cx(qubits[(i+1) % n_qubits], qubits[(i) % n_qubits])
-                    param_idx += 2
-        num_params = 2 * n_qubits * depth
+                for k in range(n_qubits):
+                    for i in range(n_qubits):
+                        if i > k :
+                            cx(qubits[(k) % n_qubits], qubits[i])
+                            rz(params[param_idx + 0], qubits[(k) % n_qubits])
+                            rz(np.pi, qubits[(k) % n_qubits])
+                            ry(params[param_idx + 1], qubits[(k) % n_qubits])
+                            ry(np.pi / 2, qubits[(k) % n_qubits])
+                            cx(qubits[i], qubits[(k) % n_qubits])
+                            ry(-np.pi / 2, qubits[(k) % n_qubits])
+                            ry(-params[param_idx + 1], qubits[(k) % n_qubits])
+                            rz(-np.pi, qubits[(k) % n_qubits])
+                            rz(-params[param_idx + 0], qubits[(k) % n_qubits])
+                            cx(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
+                            cz(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
+                            param_idx += 2
+        num_params = n_qubits * (n_qubits-1) * depth
         
         @cudaq.kernel
         def kernel_no_params():
@@ -95,14 +100,16 @@ class EigenSolver(ProblemSolver):
         # Step 1: Optimize the ansatz parameters
         initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
         if self.simulate_options["mode"] == "classical":
+            
             result = minimize(
                 cost_function,
                 initial_params,
                 method='COBYLA',
                 options={'rhobeg': 0.5, 'maxiter': 500}
             )
-            opt_params = result.x
-            energy = result.fun
+            
+            opt_params = result
+            energy = 0
         
         elif self.simulate_options["mode"] == "cudaq-vqe":
             optimizer = cudaq.optimizers.COBYLA()
@@ -123,9 +130,6 @@ class EigenSolver(ProblemSolver):
                 optimizer = minimize,
                 method='COBYLA'
             )
-        
-
-            
         
         # Step 4: Compute 1-RDM
         one_rdm, two_rdm = self.get_rdm(kernel, opt_params, number_of_orbitals)
