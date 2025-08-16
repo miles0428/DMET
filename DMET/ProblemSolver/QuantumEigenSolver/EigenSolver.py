@@ -28,7 +28,11 @@ class EigenSolver(ProblemSolver):
         if not(self.num_qpus > 1):
             self.simulate_options["async_observe"] = False
         if self.simulate_options["hybridtest"] == True:
+            import os
+            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = self.N-2 
             cudaq.set_target('nvidia', option='mgpu')
+            
+            
     
     def make_ansatz(self,n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
         assert number_of_electrons is not None, "number_of_electrons must be provided"
@@ -82,6 +86,7 @@ class EigenSolver(ProblemSolver):
         # Step 2: Define particle-number-conserving ASWAP ansatz
         
         kernel, params = self.make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
+        self.N = number_of_electrons
 
         def cost_function(opt_params):
             if self.simulate_options["async_observe"] == False:
@@ -91,7 +96,7 @@ class EigenSolver(ProblemSolver):
                 energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus)
                 self.i += 1
                 #print("self.i", self.i)
-                time.sleep(0)  # pass the control to the event loop
+                # time.sleep(0)  # pass the control to the event loop
                 energy = energy.get().expectation()
             return energy.real
 
@@ -204,6 +209,8 @@ class EigenSolver(ProblemSolver):
                             val = vals[p][q][r][s].get().expectation()
                         two_rdm[p, r, q, s] = val / 2
         if self.simulate_options["hybridtest"] == True:
+            import os
+            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = self.N-2 
             cudaq.set_target('nvidia', option='mgpu')
         return one_rdm, two_rdm
 
