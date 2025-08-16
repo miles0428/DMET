@@ -5,6 +5,9 @@ from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 import time 
+import lazy_import
+cudaq = lazy_import.lazy_module("cudaq")
+solvers = lazy_import.lazy_module("cudaq_solvers")
 
 
 class EigenSolver(ProblemSolver):
@@ -20,7 +23,6 @@ class EigenSolver(ProblemSolver):
     @with_default_kwargs({'async_observe' : False, 'mode' : 'classical', 'hybridtest': False})
     def __init__(self, depth = 2, **simulate_options):
         super().__init__()
-        import cudaq, cudaq_solvers as solvers 
         self.i = 0
         self.depth = depth
         self.num_qpus = cudaq.get_target().num_qpus()
@@ -81,7 +83,7 @@ class EigenSolver(ProblemSolver):
               number_of_electrons: int, **kwargs):
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
-        import cudaq
+        # import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
         
@@ -150,7 +152,7 @@ class EigenSolver(ProblemSolver):
         import numpy as np
         from openfermion import FermionOperator
         from openfermion.transforms import jordan_wigner
-        import cudaq
+        # import cudaq
         one_rdm = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
 
         vals = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
