@@ -5,8 +5,6 @@ from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 import time 
-import cudaq, cudaq_solvers as solvers 
-import spsa
 
 
 class EigenSolver(ProblemSolver):
@@ -22,7 +20,7 @@ class EigenSolver(ProblemSolver):
     @with_default_kwargs({'async_observe' : False, 'mode' : 'classical', 'hybridtest': False})
     def __init__(self, depth = 2, **simulate_options):
         super().__init__()
-        import cudaq
+        import cudaq, cudaq_solvers as solvers 
         self.i = 0
         self.depth = depth
         self.num_qpus = cudaq.get_target().num_qpus()
