@@ -1,24 +1,25 @@
 from __future__ import annotations
+from typing import Any, List, Tuple, Dict, Union, Optional
+import scipy.sparse as sp
 from ..ProblemFormulation.ProblemFormulation import ProblemFormulation
 import numpy as np
-from typing import List,Union
 from openfermion import FermionOperator
 from ..ProblemSolver import ProblemSolver
 from tqdm import tqdm
 from datetime import datetime
 
-def with_default_kwargs(defaults):
-    def decorator(func):
-        def wrapper(*args,**kwargs):
+def with_default_kwargs(defaults: Dict[str, Any]) -> Any:
+    def decorator(func: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             for key, value in defaults.items():
                 kwargs.setdefault(key, value)
-            return func(*args,**kwargs)
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
 class DMET:
     @with_default_kwargs({'bath_threshold': 1e-5, 'verbose': False, 'PBC': False, "process_mode": "default", 'number_of_workers': 1 })
-    def __init__(self, problem_formulation: ProblemFormulation, fragments: List[np.ndarray], problem_solver: ProblemSolver, **kwargs):
+    def __init__(self, problem_formulation: ProblemFormulation, fragments: List[np.ndarray], problem_solver: ProblemSolver, **kwargs: Any) -> None:
         """
         Initialize the DMET class with a problem formulation, fragments, and a solver.
 
@@ -39,15 +40,22 @@ class DMET:
         """
         self.one_body_problem_formulation = problem_formulation.one_body_problem_formulation
         self.many_body_problem_formulation = problem_formulation.many_body_problem_formulation
-        self.fragments = fragments  # list of fragment indices 
+        self.fragments = fragments  # list of fragment indices
         self.problem_solver = problem_solver  # instance of ProblemSolver
         self.onebodyrdm = self.one_body_problem_formulation.get_density_matrix()
         self.kwargs = kwargs
+        # verbose mode
+        # verbose level, supports True/False and also 0/1/2
+        # if verbose is True, set it to 1, otherwise set it to 0
+        # This allows for flexible verbosity control in the code.
+        if isinstance(self.kwargs.get('verbose', False), bool):
+            self.kwargs['verbose'] = 1 if self.kwargs['verbose'] else 0
+        self._block_print = lambda msg: print(msg)
         # Check if all lattice sites are in the fragment
         if not self.is_all_lattice_sites_in_fragment(fragments):
             raise ValueError("Not all lattice sites are included in the fragment.")
-     
-    def get_projectors(self, reorder_idxs: Union[np.ndarray, None] = None):
+        # END: __init__
+    def get_projectors(self, reorder_idxs: Optional[np.ndarray] = None) -> Tuple[List[np.ndarray], List[float]]:
         """
         Generate the projection operators for each fragment.
 
@@ -78,7 +86,7 @@ class DMET:
             number_of_electrons_in_fragments.append(number_of_electrons)
         return projectors, number_of_electrons_in_fragments
     
-    def get_multiplier_hamiltonian(self, mu: float, fragment: np.ndarray):
+    def get_multiplier_hamiltonian(self, mu: float, fragment: np.ndarray) -> FermionOperator:
         """
         Construct the Hamiltonian with a chemical potential term for a fragment.
 
@@ -103,7 +111,7 @@ class DMET:
         # print(f"Fragment {fragment}: Chemical potential Hamiltonian: {hamiltonian}")
         return hamiltonian
     
-    def get_fragment_hamiltonians(self):
+    def get_fragment_hamiltonians(self) -> List['FragmentHamiltonian']:
         """
         Construct the effective Hamiltonians for all fragments.
 
@@ -131,8 +139,20 @@ class DMET:
             
             # check if the projector is unitary
             if not np.allclose(np.eye(projector.shape[1]), projector_conjugate @ projector, atol=1e-5):
-                print(projector @ projector_conjugate)
-                raise ValueError("Projector is not unitary.")
+                info =f'''
+                The projector for fragment {i} is not unitary.
+                This can happen if the projector is not constructed correctly or if the one-body density matrix is not properly defined.
+                Please check the one-body density matrix and the projector construction.
+                If the issue persists, consider adjusting the bath threshold or the fragment definition.
+                If the problem continues, it may indicate a deeper issue with the problem formulation or the solver.
+                The projector matrix is:
+                {projector}
+                The conjugate projector matrix is:
+                {projector_conjugate}
+                The product of the projector and its conjugate is:
+                {projector @ projector_conjugate}
+                '''
+                raise ValueError(info)
             
             reorder_idx = reorder_idxs[i]
             # print(f"Fragment {i}: Reorder indices: {reorder_idx}")
@@ -150,7 +170,7 @@ class DMET:
         print("----------------------")
         return embedded_hamiltonians
             
-    def get_fragment_energy(self, fragment_hamiltonian: FragmentHamiltonian, onebody_rdm: np.ndarray, twobody_rdm: np.ndarray, fragment_length: int) -> float:
+    def get_fragment_energy(self, fragment_hamiltonian: 'FragmentHamiltonian', onebody_rdm: np.ndarray, twobody_rdm: np.ndarray, fragment_length: int) -> float:
         """
         Calculate the energy of a fragment Hamiltonian.
 
@@ -181,7 +201,7 @@ class DMET:
         )
         return energy
 
-    def solve_fragment(self, fragment_hamiltonian: FragmentHamiltonian, multiplier_hamiltonian: FermionOperator, number_of_orbitals: Union[int, None] = None, fragment_length: Union[int, None] = None):
+    def solve_fragment(self, fragment_hamiltonian: 'FragmentHamiltonian', multiplier_hamiltonian: FermionOperator, number_of_orbitals: Optional[int] = None, fragment_length: Optional[int] = None) -> Tuple[float, np.ndarray, np.ndarray]:
         """
         Solve the fragment Hamiltonian with the multiplier Hamiltonian.
 
@@ -212,7 +232,7 @@ class DMET:
         fragment_energy = self.get_fragment_energy(fragment_hamiltonian, onebody_rdm, twobody_rdm, fragment_length)
         return fragment_energy, onebody_rdm, twobody_rdm
 
-    def singleshot(self, mu: float):
+    def singleshot(self, mu: float) -> Tuple[float, float]:
         """
         Perform a single-shot DMET calculation.
 
@@ -234,7 +254,7 @@ class DMET:
                 N_electrons = \sum_{fragments} Tr(RDM_onebody_fragment)
         """
         self.shot += 1
-        if self.kwargs['verbose']:
+        if self.kwargs['verbose'] >= 1:
             print(f"Shot {self.shot}: mu = {mu}")
         if self.kwargs["PBC"]:
             energy, number_of_electrons =  self.singleshot_PBC(mu)
@@ -243,14 +263,15 @@ class DMET:
             energy, number_of_electrons = self.singleshot_joblib(mu)
         elif self.kwargs["process_mode"] == "threading" or self.kwargs["process_mode"] == "default":
             energy, number_of_electrons = self.singleshot_threading(mu)
-        if self.kwargs['verbose']:
+        if self.kwargs['verbose'] >= 1:
             print(f"Total energy: {energy:.5f}, Number of electrons: {number_of_electrons:.5f}")
             print("---------------------")
         self.total_energies.append(energy)
-        
+        self.write_shot_total_energy_to_hdf5(energy)
+        self.write_shot_total_electrons_to_hdf5(number_of_electrons)
         return energy, number_of_electrons
     
-    def singleshot_PBC(self, mu: float):
+    def singleshot_PBC(self, mu: float) -> Tuple[float, float]:
         """
         Perform a single-shot DMET calculation with periodic boundary conditions (PBC).
 
@@ -275,7 +296,7 @@ class DMET:
         number_of_electrons = ne * len(self.fragments)
         return total_energy, number_of_electrons
     
-    def singleshot_threading(self, mu: float):
+    def singleshot_threading(self, mu: float) -> Tuple[float, float]:
         """
         Perform a single-shot DMET calculation using threading for parallel processing.
 
@@ -304,7 +325,7 @@ class DMET:
                 number_of_electrons += ne
         return total_energy, number_of_electrons
     
-    def singleshot_joblib(self, mu: float):
+    def singleshot_joblib(self, mu: float) -> Tuple[float, float]:
         from joblib import Parallel, delayed
         results = Parallel(n_jobs=self.kwargs['number_of_workers'])(
             delayed(self.get_fragment_energy_and_number_of_electrons)(frag, ham, mu)
@@ -314,52 +335,201 @@ class DMET:
         number_of_electrons = sum(ne for _, ne in results)
         return total_energy, number_of_electrons
 
-    def get_fragment_energy_and_number_of_electrons(self, fragment, fragmentHamiltonian, mu: float):
+    def init_hdf5_file(self, filename_prefix: str = "fragment_results") -> None:
+        """
+        Initialize an HDF5 file for storing fragment calculation results.
+
+        Parameters
+        ----------
+        filename_prefix : str, optional
+            Prefix for the file name (default: 'fragment_results').
+
+        Notes
+        -----
+        Automatically generates a timestamp and saves the path to self.hdf5_path.
+        A new file is created each time run() is called.
+        """
+        import h5py
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.hdf5_path = f"{filename_prefix}_{timestamp}.h5"
+        # Create an empty HDF5 file and add a creation timestamp attribute
+        with h5py.File(self.hdf5_path, "w") as f:
+            f.attrs["created"] = timestamp
+        print(f"[DMET] HDF5 file initialized: {self.hdf5_path}")
+
+    def write_fragment_to_hdf5(self, fragment: np.ndarray, mu: float, fragment_energy: float, ne: float, onebody_rdm: np.ndarray, twobody_rdm: np.ndarray) -> None:
+        """
+        Write the results of a fragment calculation to the HDF5 file.
+        Parameters
+        ----------
+        fragment : np.ndarray
+            The indices of the fragment.
+        mu : float
+            The chemical potential for the fragment.
+        fragment_energy : float
+            The energy of the fragment.
+        ne : float                  
+            The number of electrons in the fragment.
+        onebody_rdm : np.ndarray
+            The one-body reduced density matrix for the fragment.   
+        twobody_rdm : np.ndarray
+            The two-body reduced density matrix for the fragment.
+        Notes
+        -----
+        This function appends the fragment data to the HDF5 file under the current shot group
+        
+        HDF5 Structure:
+        Root
+        └─ shot_{shot_number}
+            └─ fragment_{fragment_index}
+                ├─ mu : float                                       
+                ├─ fragment_energy : float
+                ├─ ne : float
+                ├─ fragment : np.ndarray
+                ├─ onebody_rdm_sparse : sparse matrix (COO format)
+                |   ├─ data : np.ndarray (1D array)
+                |   ├─ row : np.ndarray (1D array)
+                |   ├─ col : np.ndarray (1D array)
+                |   └─ shape : np.ndarray (2D array)
+                └─ twobody_rdm_sparse : sparse matrix (COO format)
+                    ├─ data : np.ndarray (1D array)
+                    ├─ row : np.ndarray (1D array)
+                    ├─ col : np.ndarray (1D array)
+                    └─ shape : np.ndarray (2D array)
+        Notes
+                  
+        """
+        import h5py
+        import scipy.sparse as sp
+        with h5py.File(self.hdf5_path, "a") as f:
+            shot_group = f.require_group(f"shot_{self.shot}")
+            frag_group = shot_group.create_group(f"fragment_{str(fragment)}")
+            frag_group.create_dataset("mu", data=mu)
+            frag_group.create_dataset("fragment_energy", data=fragment_energy)
+            frag_group.create_dataset("ne", data=ne)
+            frag_group.create_dataset("fragment", data=fragment)
+            # onebody_rdm 轉 coo
+            ob_rdm_coo = sp.coo_array(onebody_rdm)
+            ob_grp = frag_group.create_group("onebody_rdm_sparse")
+            ob_grp.create_dataset("data", data=ob_rdm_coo.data, compression="gzip")
+            ob_grp.create_dataset("row", data=ob_rdm_coo.row, compression="gzip")
+            ob_grp.create_dataset("col", data=ob_rdm_coo.col, compression="gzip")
+            ob_grp.create_dataset("shape", data=ob_rdm_coo.shape)
+            # twobody_rdm 轉 coo
+            tb_rdm_coo = sp.coo_array(twobody_rdm)
+            tb_grp = frag_group.create_group("twobody_rdm_sparse")
+            tb_grp.create_dataset("data", data=tb_rdm_coo.data, compression="gzip")
+            tb_grp.create_dataset("row", data=tb_rdm_coo.row, compression="gzip")
+            tb_grp.create_dataset("col", data=tb_rdm_coo.col, compression="gzip")
+            tb_grp.create_dataset("shape", data=tb_rdm_coo.shape)
+            tb_grp.attrs["original_shape"] = twobody_rdm.shape  # 存原始 4D shape
+
+    def write_shot_total_energy_to_hdf5(self, total_energy: float) -> None:
+        """
+        Write the total energy of the current shot to the HDF5 file.
+        Parameters
+        ----------
+        total_energy : float
+            The total energy calculated for the current shot.
+        Notes
+        -----
+        This function appends the total energy to the HDF5 file under the current shot group.
+
+        HDF5 Structure:
+        Root
+        └─ shot_{shot_number}
+            └─ total_energy : float
+        """
+        import h5py
+        with h5py.File(self.hdf5_path, "a") as f:
+            shot_group = f.require_group(f"shot_{self.shot}")
+            shot_group.create_dataset("total_energy", data=total_energy)
+
+    def write_shot_total_electrons_to_hdf5(self, total_electrons: float) -> None:
+        """
+        Write the total number of electrons for the current shot to the HDF5 file.
+        Parameters
+        ----------
+        total_electrons : float
+            The total number of electrons calculated for the current shot.
+        Notes
+        -----
+        This function appends the total number of electrons to the HDF5 file under the current shot group.
+        HDF5 Structure:
+        Root
+        └─ shot_{shot_number}
+            └─ total_electrons : float
+        """
+        import h5py
+        with h5py.File(self.hdf5_path, "a") as f:
+            shot_group = f.require_group(f"shot_{self.shot}")
+            shot_group.create_dataset("total_electrons", data=total_electrons)
+
+    def get_fragment_energy_and_number_of_electrons(self, fragment: np.ndarray, fragmentHamiltonian: 'FragmentHamiltonian', mu: float) -> Tuple[float, float]:
+        """
+        Calculate fragment energy and electron number, and write results to HDF5.
+
+        Parameters
+        ----------
+        fragment : array-like
+            Fragment index array.
+        fragmentHamiltonian : FragmentHamiltonian
+            Fragment Hamiltonian object.
+        mu : float
+            Chemical potential.
+
+        Returns
+        -------
+        fragment_energy : float
+            Fragment energy.
+        ne : float
+            Number of electrons in the fragment.
+
+        Notes
+        -----
+        Elements in the RDMs smaller than the threshold (default 1e-5, set by rdm_threshold) are set to zero.
+        """
+        import h5py
         number_of_orbitals = max(fragmentHamiltonian.onebody_terms.shape[0], fragmentHamiltonian.twobody_terms.shape[0])
-        print(f"Calculating energy for fragment {fragment} with chemical potential {mu}, number of orbitals {number_of_orbitals}")
+        if self.kwargs['verbose'] >= 1:
+            print(f"[DMET] Calculating energy for fragment {fragment} with chemical potential {mu}, number of orbitals {number_of_orbitals}")
         multiplier_hamiltonian = self.get_multiplier_hamiltonian(mu, fragment)
         fragment_energy, onebody_rdm, twobody_rdm = self.solve_fragment(fragmentHamiltonian, multiplier_hamiltonian, number_of_orbitals=number_of_orbitals,fragment_length=len(fragment))
-        # calculate the number of electrons in the fragment
         ne = np.trace(onebody_rdm[np.ix_(range(len(fragment)), range(len(fragment)))])
-        if self.kwargs['verbose']:
-            print(f"Fragment {fragment}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
-        self.fragment_results.append({
-                            "shot": self.shot,
-                            "mu": mu,
-                            "fragment": fragment,
-                            "ne": ne,
-                            "fragment_energy": fragment_energy,
-                            "onebody_rdm": onebody_rdm,
-                            "twobody_rdm": twobody_rdm
-                        })
+        if self.kwargs['verbose'] >= 2:
+            print(f"[DMET] Fragment {fragment}: Energy = {fragment_energy:.5f}, Number of orbitals: {number_of_orbitals}, Number of electrons = {ne:.5f}")
+        import scipy.sparse as sp
+        threshold = self.kwargs.get('rdm_threshold', 1e-5)
+        onebody_rdm[np.abs(onebody_rdm) < threshold] = 0
+        twobody_rdm[np.abs(twobody_rdm) < threshold] = 0
+        self.write_fragment_to_hdf5(fragment, mu, fragment_energy, ne, onebody_rdm, twobody_rdm)
         return fragment_energy, ne
-    
-    def run(self, mu0: float = None, mu1: float = None, singleshot: bool = False, filenameprefix = 'filename'):
 
-        
+    def run(self, mu0: Optional[float] = None, mu1: Optional[float] = None, singleshot: bool = False, filenameprefix: str = 'filename') -> float:
         """
         Perform a self-consistent DMET calculation to find the chemical potential.
+        All fragment results are written directly to HDF5, legacy list-based storage is removed.
 
         Args:
-            mu0 (float, optional): Initial guess for the chemical potential. Defaults to None.
-            mu1 (float, optional): Second guess for the chemical potential. Defaults to None.
+            mu0 (float, optional): Initial guess for the chemical potential (default: None).
+            mu1 (float, optional): Second guess for the chemical potential (default: None).
+            singleshot (bool, optional): If True, performs a single-shot calculation and returns immediately (default: False).
+            filenameprefix (str, optional): Prefix for the HDF5 file name (default: 'filename').
 
         Returns:
-            float: The total energy after convergence.
+            float: The total energy from the DMET calculation.
 
-        Main Concept:
-            Uses a root-finding algorithm to adjust the chemical potential until the electron count matches.
-
-        Math Detail:
-            The objective function is:
-                objective(mu) = N_electrons_DMET(mu) - N_electrons_onebody
-            The chemical potential is adjusted to minimize this objective.
+        Notes:
+            - Automatically generates a timestamp for the HDF5 file.
+            - The chemical potential is found using a root-finding method on the objective function.
         """
+        self.init_hdf5_file(filename_prefix=filenameprefix)
+
         from scipy.optimize import newton
         from scipy.optimize import minimize_scalar
         from scipy.optimize import root_scalar
 
-        self.fragment_results = []    
         mu0 = np.random.rand()[0] if mu0 is None else mu0
         mu1 = -np.random.rand()[0] if mu1 is None else mu1
         if mu0 == mu1:
@@ -377,7 +547,6 @@ class DMET:
         objective_value1 = self.objective(mu1)
         for _ in range(10):
             if objective_value * objective_value1 > 0:
-                # check which one is closer to zero
                 if abs(objective_value) < abs(objective_value1):
                     mu0, mu1 = mu0 + (mu0-mu1) , mu0
                     objective_value1 = objective_value
@@ -389,86 +558,37 @@ class DMET:
             else:
                 break
         if objective_value * objective_value1 > 0:
-            print(f"Objective values at mu0 and mu1 are both positive or negative: {objective_value}, {objective_value1}. Adjusting mu0 and mu1.")
+            msg = (
+                f"\n{'='*40}\n"
+                f"[DMET] Objective values at mu0 and mu1 are both positive or negative:\n"
+                f"    mu0 = {mu0:.6f}, value = {objective_value:.6f}\n"
+                f"    mu1 = {mu1:.6f}, value = {objective_value1:.6f}\n"
+                f"  Adjusting mu0 and mu1.\n"
+                f"{'='*40}\n"
+            )
+            print(msg)
             result = newton(self.objective,x0=mu0, tol=1e-4, maxiter=1000, x1=mu1)
         elif objective_value * objective_value1 < 0:
-            # result = minimize_scalar(self.objective, bracket=(mu0, mu1), method='brent', xtol= 1e-3)
             result = root_scalar(self.objective, bracket=[mu0, mu1], method='brentq', xtol=1e-5, rtol=1e-4, maxiter=1000)
-            
         if result is not None:
-            print(f"Converged to chemical potential: \n{result}")   
-            print(f"Total energy: {self.total_energies[-1]}")
+            msg = (
+                f"\n{'='*40}\n"
+                f"[DMET] Converged to chemical potential:\n"
+                f"    {result}\n"
+                f"[DMET] Final total energy: {self.total_energies[-1]:.8f}\n"
+                f"{'='*40}\n"
+            )
+            print(msg)
         else:
-            print("Failed to converge to a solution.")
-            
-        self.save_fragment_results(filename_prefix = filenameprefix)
-        
+            msg = (
+                f"\n{'='*40}\n"
+                f"[DMET] Failed to converge to a solution.\n"
+                f"{'='*40}\n"
+            )
+            print(msg)
         return self.total_energies[-1]
-    def save_fragment_results(self, filename_prefix: str = "fragment_results"):
-        """
-        Group fragment results by shot and save to a timestamped .npz file.
 
-        Args:
-            filename_prefix (str): Prefix of the output filename (default = 'fragment_results').
-                                The final filename will be like: {prefix}_{timestamp}.npz
-
-        Format:
-        [
-        {
-            "shot": int,
-            "mu": float,
-            "fragments": [
-            {
-                "fragment": ndarray,
-                "ne": float,
-                "fragment_energy": float,
-                "onebody_rdm": ndarray,
-                "twobody_rdm": ndarray
-            },
-            ...
-            ]
-        },
-        ...
-        ]
-        """
-        from datetime import datetime
-
-        if not hasattr(self, "fragment_results") or not self.fragment_results:
-            print("No fragment results to save.")
-            return
-
-        # Group by shot number
-        grouped = {}
-        for item in self.fragment_results:
-            shot = item["shot"]
-            if shot not in grouped:
-                grouped[shot] = {
-                    "shot": shot,
-                    "mu": item["mu"],
-                    "fragments": []
-                }
-            grouped[shot]["fragments"].append({
-                "fragment": item["fragment"],
-                "ne": item["ne"],
-                "fragment_energy": item["fragment_energy"],
-                "onebody_rdm": item["onebody_rdm"],
-                "twobody_rdm": item["twobody_rdm"]
-            })
-
-        grouped_results = list(grouped.values())
-        results_array = np.array(grouped_results, dtype=np.object_)
-
-        # Construct final filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{filename_prefix}_{timestamp}.npz"
-
-        np.savez(filename, total_energy=self.total_energies[-1], fragment_results=results_array)
-        print(f"Results saved to {filename}")
-
-
-
-
-    def objective(self, mu: float):
+    def objective(self, mu: float) -> float:
         """
         Calculate the objective function for the DMET calculation.
 
@@ -494,55 +614,53 @@ class DMET:
         self.objective_buffer[mu] = number_of_electrons_dmet - number_of_electrons_one_body
         return number_of_electrons_dmet - number_of_electrons_one_body
     
-    def is_all_lattice_sites_in_fragment(self, fragments: np.ndarray):
+    def is_all_lattice_sites_in_fragment(self, fragments: Union[List[np.ndarray], np.ndarray]) -> bool:
         """
-        Check if all lattice sites are included in the fragment.
+        Check if all lattice sites are included in the provided fragments.
 
         Args:
-            fragments (np.ndarray): The indices of the fragments.
+            fragments (np.ndarray): List or array of fragment indices.
 
         Returns:
-            bool: True if all lattice sites are in the fragment, False otherwise.
+            bool: True if all lattice sites are covered by the fragments, False otherwise.
 
-        Main Concept:
-            Validates that the fragment includes all necessary lattice sites.
+        Concept:
+            Ensures that every site in the system is assigned to at least one fragment.
 
-        Math Detail:
-            The check is performed using:
-                all_lattice_sites = np.arange(self.onebodyrdm.shape[0])
-                return np.all(np.isin(all_lattice_sites, fragment))
+        Details:
+            Flattens the fragments and checks if every site index from 0 to N-1 is present in the union.
         """
         all_lattice_sites = np.arange(self.onebodyrdm.shape[0])
-        # flatten the fragments
+        # Flatten fragments into a single array
         fragment = np.concatenate(fragments)
-        return np.all(np.isin(all_lattice_sites,fragment))
-    
+        return np.all(np.isin(all_lattice_sites, fragment))
+
 class FragmentHamiltonian:
-    def __init__(self, onebody_terms: np.ndarray, twobody_terms: np.ndarray, number_of_electrons: int = None):
+    def __init__(self, onebody_terms: np.ndarray, twobody_terms: np.ndarray, number_of_electrons: Optional[int] = None) -> None:
         """
-        Initialize the embedded Hamiltonian with one-body and two-body integrals.
+        Initialize a fragment Hamiltonian with one-body and two-body integrals.
 
         Args:
-            onebody_terms (np.ndarray): The one-body integrals.
-            twobody_terms (np.ndarray): The two-body integrals.
+            onebody_terms (np.ndarray): One-body integrals for the fragment.
+            twobody_terms (np.ndarray): Two-body integrals for the fragment.
+            number_of_electrons (int): Number of electrons in the fragment (required).
 
-        Output:
-            None
+        Raises:
+            AssertionError: If number_of_electrons is not provided.
 
-        Main Concept:
-            Sets up the embedded Hamiltonian used for fragment calculations.
+        Concept:
+            Sets up the embedded Hamiltonian for fragment calculations, ensuring shapes are compatible.
 
-        Math Detail:
-            The Hamiltonian is built from the provided one-body and two-body terms using:
-                H = build_hamiltonian_from_one_two_body(onebody_terms, twobody_terms)
+        Details:
+            Pads onebody_terms or twobody_terms as needed so their shapes match for further calculations.
         """
         from ._helpers.BuildHamiltonian import build_hamiltonian_from_one_two_body
         self.onebody_terms = onebody_terms
         self.twobody_terms = twobody_terms
         self.number_of_electrons = number_of_electrons
-        assert number_of_electrons != None, "Number of electrons must be specified for the fragment Hamiltonian." 
+        assert number_of_electrons is not None, "Number of electrons must be specified for the fragment Hamiltonian."
         self.H = build_hamiltonian_from_one_two_body(onebody_terms, twobody_terms)
-        # make sure onebody_terms and twobody_terms have the same shape
+        # Ensure onebody_terms and twobody_terms have compatible shapes
         if self.onebody_terms.shape[0] < self.twobody_terms.shape[0]:
             new_shape = (self.twobody_terms.shape[0], self.twobody_terms.shape[0])
             self.onebody_terms = np.pad(self.onebody_terms, ((0, new_shape[0] - self.onebody_terms.shape[0]), (0, new_shape[1] - self.onebody_terms.shape[1])), mode='constant')
