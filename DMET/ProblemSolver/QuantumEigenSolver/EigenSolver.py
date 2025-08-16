@@ -118,7 +118,7 @@ class EigenSolver(ProblemSolver):
                 options={'rhobeg': 0.5, 'maxiter': 500}
             )
             
-            opt_params = result
+            opt_params = result.x
             energy = 0
         
         elif self.simulate_options["mode"] == "cudaq-vqe":
