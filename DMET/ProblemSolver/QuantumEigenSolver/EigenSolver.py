@@ -5,9 +5,14 @@ from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 import time 
-import lazy_import
-cudaq = lazy_import.lazy_module("cudaq")
-solvers = lazy_import.lazy_module("cudaq_solvers")
+
+try :
+    import cudaq
+    import cudaq_solvers as solvers
+except:
+    pass
+# cudaq = lazy_import.lazy_module("cudaq")
+# solvers = lazy_import.lazy_module("cudaq_solvers")
 
 
 class EigenSolver(ProblemSolver):
