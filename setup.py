@@ -20,14 +20,15 @@ class PyTest(TestCommand):
 
 setup(
     name="DMET-nolab",
-    version="0.2.2",
+    version="0.2.5",
     packages=find_packages(),  # Automatically find all packages
     install_requires=[
         "numpy",
         "scipy >= 1.15.0",
         "openfermion",
-        "cudaq",
+        #"cudaq",
         "tqdm" ,
+        "pyscf >= 2.9.0"
         'joblib'# Added dependency
     ],
     entry_points={
