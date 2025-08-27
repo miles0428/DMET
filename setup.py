@@ -28,7 +28,7 @@ setup(
         "openfermion",
         #"cudaq",
         "tqdm" ,
-        "pyscf >= 2.9.0"
+        "pyscf >= 2.9.0",
         'joblib'# Added dependency
     ],
     entry_points={
