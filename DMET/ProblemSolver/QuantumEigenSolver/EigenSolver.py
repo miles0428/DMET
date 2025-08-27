@@ -32,14 +32,6 @@ class EigenSolver(ProblemSolver):
         self.depth = depth
         self.num_qpus = cudaq.get_target().num_qpus()
         self.simulate_options = simulate_options
-        if not(self.num_qpus > 1):
-            self.simulate_options["async_observe"] = False
-        if self.simulate_options["hybridtest"] == True:
-            import os
-            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = self.N-2 
-            cudaq.set_target('nvidia', option='mgpu')
-            
-            
     
     def make_ansatz(self,n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
         assert number_of_electrons is not None, "number_of_electrons must be provided"
@@ -88,12 +80,20 @@ class EigenSolver(ProblemSolver):
               number_of_electrons: int, **kwargs):
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
+        
+        if not(self.num_qpus > 1):
+            self.simulate_options["async_observe"] = False
+        if self.simulate_options["hybridtest"] == True:
+            import os
+            self.N = number_of_orbitals
+            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = self.N-2 
+            cudaq.set_target('nvidia', option='mgpu')
         # import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
         # Step 2: Define particle-number-conserving ASWAP ansatz
         
         kernel, params = self.make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
-        self.N = number_of_electrons
+        self.N = number_of_orbitals
 
         def cost_function(opt_params):
             if self.simulate_options["async_observe"] == False:
