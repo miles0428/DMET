@@ -217,7 +217,7 @@ class EigenSolver(ProblemSolver):
                         two_rdm[p, r, q, s] = val / 2
         if self.simulate_options["hybridtest"] == True:
             import os
-            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = self.N-2 
+            #os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2) 
             cudaq.set_target('nvidia', option='mgpu')
         return one_rdm, two_rdm
 
