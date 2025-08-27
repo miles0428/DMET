@@ -86,7 +86,7 @@ class EigenSolver(ProblemSolver):
         if self.simulate_options["hybridtest"] == True:
             import os
             self.N = number_of_orbitals
-            #os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2)
+            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2)
             cudaq.set_target('nvidia', option='mgpu')
         # import cudaq
         cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
@@ -217,7 +217,7 @@ class EigenSolver(ProblemSolver):
                         two_rdm[p, r, q, s] = val / 2
         if self.simulate_options["hybridtest"] == True:
             import os
-            #os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2) 
+            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2) 
             cudaq.set_target('nvidia', option='mgpu')
         return one_rdm, two_rdm
 
