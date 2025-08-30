@@ -154,6 +154,9 @@ class EigenSolver(ProblemSolver):
         return qubit_ham
     
     def get_rdm(self, kernel, opt_params, number_of_orbitals):
+        if self.simulate_options["async_observe"] == True:
+            if self.simulate_options["hybridtest"] == True:
+                cudaq.set_target('nvidia', option='mqpu')
         import numpy as np
         from openfermion import FermionOperator
         from openfermion.transforms import jordan_wigner
@@ -170,8 +173,8 @@ class EigenSolver(ProblemSolver):
                 if self.simulate_options["async_observe"] == False:
                     vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
                 if self.simulate_options["async_observe"] == True:
-                    if self.simulate_options["hybridtest"] == True:
-                        cudaq.set_target('nvidia', option='mqpu')
+                    #if self.simulate_options["hybridtest"] == True:
+                        #cudaq.set_target('nvidia', option='mqpu')
                     vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                     self.i += 1
                     
