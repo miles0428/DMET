@@ -78,6 +78,8 @@ class EigenSolver(ProblemSolver):
 
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
               number_of_electrons: int, **kwargs):
+        import time
+        print(time.time())
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
         
@@ -142,7 +144,10 @@ class EigenSolver(ProblemSolver):
             )
         
         # Step 4: Compute 1-RDM
+        import time
+        print(time.time())
         one_rdm, two_rdm = self.get_rdm(kernel, opt_params, number_of_orbitals)
+        print(time.time())
         return energy, one_rdm, two_rdm
 
     def ensure_real_coefficients(self,qubit_ham):
