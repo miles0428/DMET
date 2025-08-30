@@ -105,55 +105,46 @@ class OneBodySSHHFormulation_HF(OneBodyProblemFormulation):
         return e_ground, wavefunction
 
 
-    def get_density_matrix(self, max_cycle: int = 50, conv_tol: float = 1e-10):
+    def get_density_matrix(self, max_cycle: int = 200, conv_tol: float = 1e-12,
+                       hartree_shift: bool = True, enforce_pm: bool = False):
         """
-        Compute the one-body reduced density matrix using PySCF UHF.
-        - Includes on-site Hubbard U via mean-field decoupling:
-          V^alpha = diag(U * n_beta), V^beta = diag(U * n_alpha)
-        - Keeps spin-orbital layout:
-          [site0_up, site0_dn, site1_up, site1_dn, ..., siteL-1_up, siteL-1_dn]
+        UHF mean-field 1-RDM for lattice Hubbard in spin-orbital layout:
+        [site0_up, site0_dn, site1_up, site1_dn, ...].
+        - Optional Hartree (n - 1/2) shift for better half-filling stability.
+        - Stronger SCF stabilization (+ Newton refine).
+        - Optional paramagnetic enforcement by averaging alpha/beta.
 
-        Args:
-            U (float): on-site Hubbard interaction strength. U=0 -> non-interacting.
-            max_cycle (int): maximum SCF iterations.
-            conv_tol (float): SCF energy convergence tolerance.
-
-        Returns:
-            np.ndarray: (2*L) x (2*L) spin-orbital 1-RDM (real, rounded to 1e-10).
+        Returns
+        -------
+        gamma : (2L, 2L) real 1-RDM
         """
         try:
             from pyscf import gto, scf
             import numpy as np
-            print("有裝pyscf")
         except Exception:
-            print("沒裝pyscf")
-            # 後備：若沒裝 PySCF，就用原本的 Slater projector
+            # fallback: Slater (U=0) projector
             if self._wavefunction is None:
                 _, self._wavefunction = self.get_slater(self.number_of_electrons)
-            return np.dot(self._wavefunction, self._wavefunction.conjugate().T).real.round(10)
-        U = self.U
-        # 一體哈密頓量（spin-orbital，大小 2L x 2L）
+            return (self._wavefunction @ self._wavefunction.conjugate().T).real.round(10)
+
+        U = float(getattr(self, "U", 0.0))
         H_so = self.get_hamiltonian()
         dim = H_so.shape[0]
         assert dim % 2 == 0, "Spin-orbital Hamiltonian dimension must be even."
-        nao = dim // 2  # 空間軌域數（每個空間軌域對應一個 site）
+        nao = dim // 2
 
-        # 拆成 alpha / beta 的一體項（空間軌域基底）
+        # Split into alpha/beta one-body blocks (space-orbital basis)
         h1e_a = H_so[0::2, 0::2].real.copy()
         h1e_b = H_so[1::2, 1::2].real.copy()
-
-        # 單位重疊（晶格模型）
         S = np.eye(nao)
 
-        # 電子數與自旋分佈
         ne = int(self.number_of_electrons)
         n_alpha = (ne + 1) // 2
         n_beta  = ne // 2
         spin_mult = n_alpha - n_beta  # 2S
 
-        # 建立虛擬分子（覆寫積分，避免用到實體 AO 積分）
         mol = gto.Mole()
-        mol.atom = [["H", (i, 0.0, 0.0)] for i in range(nao)]  # 只為了維度
+        mol.atom = [["H", (i, 0.0, 0.0)] for i in range(nao)]  # dummy chain
         mol.basis = "sto-3g"
         mol.charge = 0
         mol.spin = spin_mult
@@ -164,52 +155,83 @@ class OneBodySSHHFormulation_HF(OneBodyProblemFormulation):
         mf.get_ovlp = (lambda *args, **kwargs: S)
         mf.get_hcore = (lambda *args, **kwargs: (h1e_a, h1e_b))
 
-        # 覆寫兩體有效勢：
-        #   U=0 -> 回傳 0；U>0 -> 依據當前 dm 的對角元組 V^alpha/beta
+        # Mean-field decoupling with optional (n - 1/2) shift
         def get_veff(_mol=None, dm=None, *args, **kwargs):
+            zero = np.zeros_like(h1e_a)
             if U == 0.0 or dm is None:
-                zero_a = np.zeros_like(h1e_a)
-                zero_b = np.zeros_like(h1e_b)
-                return (zero_a, zero_b)
+                return (zero, zero)
             dm_a, dm_b = dm
-            # 站點佔據數（空間軌域對角元）
             n_a = np.clip(np.diag(dm_a), 0.0, 1.0)
             n_b = np.clip(np.diag(dm_b), 0.0, 1.0)
-            Va = np.diag(U * n_b)  # alpha 受 beta 影響
-            Vb = np.diag(U * n_a)  # beta 受 alpha 影響
+            if hartree_shift:
+                Va = np.diag(U * (n_b - 0.5))
+                Vb = np.diag(U * (n_a - 0.5))
+            else:
+                Va = np.diag(U * n_b)
+                Vb = np.diag(U * n_a)
             return (Va, Vb)
 
         mf.get_veff = get_veff
-        mf._eri = None                  # 不用雙電子積分
-        mf.energy_nuc = lambda *a, **k: 0.0  # 模型核能=0
+        mf._eri = None
+        mf.energy_nuc = lambda *a, **k: 0.0
         mf.max_cycle = max_cycle
         mf.conv_tol = conv_tol
-        mf.diis = scf.diis.DIIS()       # 幫助收斂
-        mf.level_shift = 0.0
-        mf.damp = 0.0
+        mf.conv_tol_grad = 1e-8
+        mf.diis = scf.diis.DIIS()
+        mf.diis_space = 12
+        mf.level_shift = 0.2   # small positive shift helps metals
+        mf.damp = 0.2
 
-        # 初值：非交互（U=0）的 hcore 本徵向量填佔
-        # ——這可加速收斂
-        e_a, C_a = np.linalg.eigh(h1e_a)
-        e_b, C_b = np.linalg.eigh(h1e_b)
-        occ_a_idx = np.argsort(e_a)[:n_alpha]
-        occ_b_idx = np.argsort(e_b)[:n_beta]
-        Ca_occ = C_a[:, occ_a_idx]
-        Cb_occ = C_b[:, occ_b_idx]
+        # Build a better initial dm (U=0 eigenvectors)
+        ea, Ca = np.linalg.eigh(h1e_a)
+        eb, Cb = np.linalg.eigh(h1e_b)
+        Ca_occ = Ca[:, np.argsort(ea)[:n_alpha]]
+        Cb_occ = Cb[:, np.argsort(eb)[:n_beta]]
         dm_a0 = Ca_occ @ Ca_occ.T
         dm_b0 = Cb_occ @ Cb_occ.T
 
-        # 以自訂初值啟動 SCF（避免預設去呼叫二電子積分）
+        # First run with DIIS/level shift
         mf.kernel(dm0=(dm_a0, dm_b0))
 
-        # 取回 1-RDM（空間軌域）
+        # Newton refinement (often reduces spin contamination & idempotency error)
+        try:
+            mf = scf.newton(mf)
+            mf.level_shift = 0.0
+            mf.damp = 0.0
+            mf.kernel()
+        except Exception:
+            pass
+
         dm_a, dm_b = mf.make_rdm1()
 
-        # 組回 spin-orbital 形式
+        # (Optional) enforce paramagnetic solution by averaging α/β
+        if enforce_pm:
+            dm_mean = 0.5 * (dm_a + dm_b)
+            dm_a = dm_mean.copy()
+            dm_b = dm_mean.copy()
+
         gamma = np.zeros((dim, dim), dtype=float)
         gamma[0::2, 0::2] = dm_a
         gamma[1::2, 1::2] = dm_b
+
+        # Quick sanity report (prints once; comment out in production)
+        try:
+            # Hermiticity & trace
+            herm_err = np.linalg.norm(gamma - gamma.T, ord='fro')
+            tr = np.trace(gamma)
+            # Idempotency check for Slater-type (UHF is single-determinant): ||γ^2 - γ||
+            idem_err = np.linalg.norm(gamma @ gamma - gamma, ord='fro')
+            # Occupation bounds
+            w = np.linalg.eigvalsh(gamma)
+            print(f"[RDM check] trace={tr:.8f} (target {ne}), "
+                f"Hermiticity|γ-γ^T|={herm_err:.2e}, "
+                f"idempotency|γ²-γ|={idem_err:.2e}, "
+                f"eig in [{w.min():.4f}, {w.max():.4f}]")
+        except Exception:
+            pass
+
         return gamma.round(10)
+
 
 
 class ManyBodySSHHFormulation_HF(ManyBodyProblemFormulation):
