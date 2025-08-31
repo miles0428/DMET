@@ -79,7 +79,7 @@ class EigenSolver(ProblemSolver):
     def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
               number_of_electrons: int, **kwargs):
         import time
-        print(time.time())
+        # print(time.time())
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("Hamiltonian must be a FermionOperator")
         
@@ -104,8 +104,6 @@ class EigenSolver(ProblemSolver):
             if self.simulate_options["async_observe"] == True:
                 energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus)
                 self.i += 1
-                #print("self.i", self.i)
-                # time.sleep(0)  # pass the control to the event loop
                 energy = energy.get().expectation()
             return energy.real
 
@@ -145,9 +143,9 @@ class EigenSolver(ProblemSolver):
         
         # Step 4: Compute 1-RDM
         import time
-        print(time.time())
+        # print(time.time())
         one_rdm, two_rdm = self.get_rdm(kernel, opt_params, number_of_orbitals)
-        print(time.time())
+        # print(time.time())
         return energy, one_rdm, two_rdm
 
     def ensure_real_coefficients(self,qubit_ham):
@@ -213,7 +211,7 @@ class EigenSolver(ProblemSolver):
                             vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
                             self.i += 1
                             
-        time.sleep(0)  # pass the control to the event loop
+        
         for p in range(number_of_orbitals):
             for q in range(number_of_orbitals):
                 for r in range(number_of_orbitals):
