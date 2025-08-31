@@ -3,7 +3,7 @@ import numpy as np
 from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
 
 class OneBodySSHHFormulation(OneBodyProblemFormulation):
-    def __init__(self, N_cells, t1, t2, number_of_electrons, PBC):
+    def __init__(self, N_cells, t1, t2, number_of_electrons, PBC, alpha=0):
         """
         Initialize the one-body Hubbard formulation.
 
@@ -29,6 +29,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         self._wavefunction = None
         self.H = self.get_hamiltonian()
         self.number_of_electrons = number_of_electrons
+        self.alpha=alpha
 
     def get_hamiltonian(self):
         """
@@ -76,8 +77,45 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
             H[q_dn, p_dn] = -t
 
         return H
+    def get_slater_strong_interaction(self, number_of_electrons):
+        """
+        Construct a Slater determinant wavefunction for a strong-interaction limit
+        by filling orbitals in an 'even-then-odd' order from the one-body Hamiltonian.
+    
+        Args:
+            number_of_electrons (int): Number of electrons to occupy.
+    
+        Returns:
+            e_ground (float): Sum of selected one-body energies (approximate).
+            wavefunction (np.ndarray): Slater determinant wavefunction of shape (4*L, number_of_electrons).
+        """
+        H = self.get_hamiltonian()
+    
+        # Diagonalize one-body Hamiltonian
+        eigenvalues, eigenvectors = np.linalg.eigh(H)
+    
+        # Sort eigenvalues
+        idx = np.argsort(eigenvalues)
+    
+        # Create 'even-then-odd' filling order
+        even_idx = idx[::2]
+        odd_idx = idx[1::2]
+        filling_order = np.concatenate([even_idx, odd_idx])
+    
+        # Select the first number_of_electrons orbitals in this order
+        selected_idx = filling_order[:number_of_electrons]
+    
+        # Approximate ground state energy
+        e_ground = np.sum(eigenvalues[selected_idx])
+    
+        # Construct wavefunction
+        wavefunction = eigenvectors[:, selected_idx]
+    
+        self._wavefunction = wavefunction
+        return e_ground, wavefunction
 
-    def get_slater(self, number_of_electrons):
+
+    def get_slater_weak_interaction(self, number_of_electrons):
         """
         Diagonalize the one-body Hamiltonian and construct the Slater determinant wavefunction.
 
@@ -116,9 +154,12 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
                 \gamma = \psi \psi^\dagger
             where \psi is the wavefunction.
         """
-        if self._wavefunction is None:
-            _, self._wavefunction = self.get_slater(self.number_of_electrons)
-        return np.dot(self._wavefunction, self._wavefunction.conjugate().T).real.round(10)
+        _, self._wavefunction_weak = self.get_slater_weak_interaction(self.number_of_electrons)
+        _, self._wavefunction_strong = self.get_slater_strong_interaction(self.number_of_electrons)
+        rdm_weak = np.dot(self._wavefunction_weak, self._wavefunction_weak.conjugate().T).real.round(10)
+        rdm_strong = np.dot(self._wavefunction_strong, self._wavefunction_strong.conjugate().T).real.round(10)
+        
+        return (1-self.alpha)*rdm_weak+self.alpha*rdm_strong
 
 class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
     def __init__(self, N_cells, t1, t2, U, PBC):
