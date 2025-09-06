@@ -163,19 +163,23 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         rdm_weak = (factor_weak**2) * np.dot(self._wavefunction_weak, self._wavefunction_weak.conjugate().T).real.round(10)
         rdm_strong = (factor_strong **2) * np.dot(self._wavefunction_strong, self._wavefunction_strong.conjugate().T).real.round(10)
         # overlap matrix
-        S = np.dot(self._wavefunction_weak.conjugate().T, self._wavefunction_strong)
+        # check if the wavefunctions are the same
+        bool_same = np.allclose(self._wavefunction_weak, self._wavefunction_strong, atol=1e-10)
+        if not bool_same:
+            S = np.dot(self._wavefunction_weak.conjugate().T, self._wavefunction_strong)
 
-        # determinant and inverse
-        detS = np.linalg.det(S)
-        invS = np.linalg.inv(S)
+            # determinant and inverse
+            detS = np.linalg.det(S)
+            invS = np.linalg.inv(S)
 
-        # cross term
-        rdm_cross = factor_weak * factor_strong * (
-            detS * np.dot(self._wavefunction_strong, np.dot(invS, self._wavefunction_weak.conjugate().T))
-            + np.conjugate(detS) * np.dot(self._wavefunction_weak, np.dot(invS.conjugate().T, self._wavefunction_strong.conjugate().T))
-        )
-
-        rdm_cross = rdm_cross.real.round(10)
+            # cross term
+            rdm_cross = factor_weak * factor_strong * (
+                detS * np.dot(self._wavefunction_strong, np.dot(invS, self._wavefunction_weak.conjugate().T))
+                + np.conjugate(detS) * np.dot(self._wavefunction_weak, np.dot(invS.conjugate().T, self._wavefunction_strong.conjugate().T))
+            )
+            rdm_cross = rdm_cross.real.round(10)
+        else:
+            return rdm_weak + rdm_strong
         return rdm_weak + rdm_strong + rdm_cross
 
 class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
