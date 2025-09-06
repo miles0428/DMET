@@ -7,6 +7,7 @@ from openfermion import FermionOperator
 from ..ProblemSolver import ProblemSolver
 from tqdm import tqdm
 from datetime import datetime
+from filelock import FileLock
 
 def with_default_kwargs(defaults: Dict[str, Any]) -> Any:
     def decorator(func: Any) -> Any:
@@ -333,6 +334,7 @@ class DMET:
         )
         total_energy = sum(e for e, _ in results)
         number_of_electrons = sum(ne for _, ne in results)
+        print(f"Total energy from joblib: {total_energy}, Number of electrons from joblib: {number_of_electrons}")
         return total_energy, number_of_electrons
 
     def init_hdf5_file(self, filename_prefix: str = "fragment_results") -> None:
@@ -353,6 +355,7 @@ class DMET:
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.hdf5_path = f"{filename_prefix}_{timestamp}.h5"
+        self.lock_path = self.hdf5_path + ".lock"
         # Create an empty HDF5 file and add a creation timestamp attribute
         with h5py.File(self.hdf5_path, "w") as f:
             f.attrs["created"] = timestamp
@@ -402,28 +405,30 @@ class DMET:
         """
         import h5py
         import scipy.sparse as sp
-        with h5py.File(self.hdf5_path, "a") as f:
-            shot_group = f.require_group(f"shot_{self.shot}")
-            frag_group = shot_group.create_group(f"fragment_{str(fragment)}")
-            frag_group.create_dataset("mu", data=mu)
-            frag_group.create_dataset("fragment_energy", data=fragment_energy)
-            frag_group.create_dataset("ne", data=ne)
-            frag_group.create_dataset("fragment", data=fragment)
-            # onebody_rdm 轉 coo
-            ob_rdm_coo = sp.coo_array(onebody_rdm)
-            ob_grp = frag_group.create_group("onebody_rdm_sparse")
-            ob_grp.create_dataset("data", data=ob_rdm_coo.data, compression="gzip")
-            ob_grp.create_dataset("row", data=ob_rdm_coo.row, compression="gzip")
-            ob_grp.create_dataset("col", data=ob_rdm_coo.col, compression="gzip")
-            ob_grp.create_dataset("shape", data=ob_rdm_coo.shape)
-            # twobody_rdm 轉 coo
-            tb_rdm_coo = sp.coo_array(twobody_rdm)
-            tb_grp = frag_group.create_group("twobody_rdm_sparse")
-            tb_grp.create_dataset("data", data=tb_rdm_coo.data, compression="gzip")
-            tb_grp.create_dataset("row", data=tb_rdm_coo.row, compression="gzip")
-            tb_grp.create_dataset("col", data=tb_rdm_coo.col, compression="gzip")
-            tb_grp.create_dataset("shape", data=tb_rdm_coo.shape)
-            tb_grp.attrs["original_shape"] = twobody_rdm.shape  # 存原始 4D shape
+        lock = FileLock(self.lock_path)
+        with lock:
+            with h5py.File(self.hdf5_path, "a") as f:
+                shot_group = f.require_group(f"shot_{self.shot}")
+                frag_group = shot_group.create_group(f"fragment_{str(fragment)}")
+                frag_group.create_dataset("mu", data=mu)
+                frag_group.create_dataset("fragment_energy", data=fragment_energy)
+                frag_group.create_dataset("ne", data=ne)
+                frag_group.create_dataset("fragment", data=fragment)
+                # onebody_rdm 轉 coo
+                ob_rdm_coo = sp.coo_array(onebody_rdm)
+                ob_grp = frag_group.create_group("onebody_rdm_sparse")
+                ob_grp.create_dataset("data", data=ob_rdm_coo.data, compression="gzip")
+                ob_grp.create_dataset("row", data=ob_rdm_coo.row, compression="gzip")
+                ob_grp.create_dataset("col", data=ob_rdm_coo.col, compression="gzip")
+                ob_grp.create_dataset("shape", data=ob_rdm_coo.shape)
+                # twobody_rdm 轉 coo
+                tb_rdm_coo = sp.coo_array(twobody_rdm)
+                tb_grp = frag_group.create_group("twobody_rdm_sparse")
+                tb_grp.create_dataset("data", data=tb_rdm_coo.data, compression="gzip")
+                tb_grp.create_dataset("row", data=tb_rdm_coo.row, compression="gzip")
+                tb_grp.create_dataset("col", data=tb_rdm_coo.col, compression="gzip")
+                tb_grp.create_dataset("shape", data=tb_rdm_coo.shape)
+                tb_grp.attrs["original_shape"] = twobody_rdm.shape  # 存原始 4D shape
 
     def write_shot_total_energy_to_hdf5(self, total_energy: float) -> None:
         """
@@ -442,9 +447,11 @@ class DMET:
             └─ total_energy : float
         """
         import h5py
-        with h5py.File(self.hdf5_path, "a") as f:
-            shot_group = f.require_group(f"shot_{self.shot}")
-            shot_group.create_dataset("total_energy", data=total_energy)
+        lock = FileLock(self.lock_path)
+        with lock:
+            with h5py.File(self.hdf5_path, "a") as f:
+                shot_group = f.require_group(f"shot_{self.shot}")
+                shot_group.create_dataset("total_energy", data=total_energy)
 
     def write_shot_total_electrons_to_hdf5(self, total_electrons: float) -> None:
         """
@@ -462,9 +469,11 @@ class DMET:
             └─ total_electrons : float
         """
         import h5py
-        with h5py.File(self.hdf5_path, "a") as f:
-            shot_group = f.require_group(f"shot_{self.shot}")
-            shot_group.create_dataset("total_electrons", data=total_electrons)
+        lock = FileLock(self.lock_path)
+        with lock:
+            with h5py.File(self.hdf5_path, "a") as f:
+                shot_group = f.require_group(f"shot_{self.shot}")
+                shot_group.create_dataset("total_electrons", data=total_electrons)
 
     def get_fragment_energy_and_number_of_electrons(self, fragment: np.ndarray, fragmentHamiltonian: 'FragmentHamiltonian', mu: float) -> Tuple[float, float]:
         """
