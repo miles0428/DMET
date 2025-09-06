@@ -77,6 +77,7 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
             H[q_dn, p_dn] = -t
 
         return H
+    
     def get_slater_strong_interaction(self, number_of_electrons):
         """
         Construct a Slater determinant wavefunction for a strong-interaction limit
@@ -156,10 +157,26 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         """
         _, self._wavefunction_weak = self.get_slater_weak_interaction(self.number_of_electrons)
         _, self._wavefunction_strong = self.get_slater_strong_interaction(self.number_of_electrons)
-        rdm_weak = np.dot(self._wavefunction_weak, self._wavefunction_weak.conjugate().T).real.round(10)
-        rdm_strong = np.dot(self._wavefunction_strong, self._wavefunction_strong.conjugate().T).real.round(10)
         
-        return (1-self.alpha)*rdm_weak+self.alpha*rdm_strong
+        factor_weak = np.sqrt(1 - self.alpha)
+        factor_strong = np.sqrt(self.alpha)
+        rdm_weak = (factor_weak**2) * np.dot(self._wavefunction_weak, self._wavefunction_weak.conjugate().T).real.round(10)
+        rdm_strong = (factor_strong **2) * np.dot(self._wavefunction_strong, self._wavefunction_strong.conjugate().T).real.round(10)
+        # overlap matrix
+        S = np.dot(self._wavefunction_weak.conjugate().T, self._wavefunction_strong)
+
+        # determinant and inverse
+        detS = np.linalg.det(S)
+        invS = np.linalg.inv(S)
+
+        # cross term
+        rdm_cross = factor_weak * factor_strong * (
+            detS * np.dot(self._wavefunction_strong, np.dot(invS, self._wavefunction_weak.conjugate().T))
+            + np.conjugate(detS) * np.dot(self._wavefunction_weak, np.dot(invS.conjugate().T, self._wavefunction_strong.conjugate().T))
+        )
+
+        rdm_cross = rdm_cross.real.round(10)
+        return rdm_weak + rdm_strong + rdm_cross
 
 class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
     def __init__(self, N_cells, t1, t2, U, PBC):
