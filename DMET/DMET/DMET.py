@@ -231,6 +231,7 @@ class DMET:
         energy, onebody_rdm, twobody_rdm= self.problem_solver.solve(embedded_hamiltonian, number_of_orbitals=number_of_orbitals, number_of_electrons=fragment_hamiltonian.number_of_electrons)
         # print(onebody_rdm.round(5).real)
         fragment_energy = self.get_fragment_energy(fragment_hamiltonian, onebody_rdm, twobody_rdm, fragment_length)
+        print(f"Fragment energy: {fragment_energy}")
         return fragment_energy, onebody_rdm, twobody_rdm
 
     def singleshot(self, mu: float) -> Tuple[float, float]:
@@ -551,6 +552,16 @@ class DMET:
         self.fragment_hamiltonians = self.get_fragment_hamiltonians()
         self.objective_buffer = {}
         objective_value = self.objective(mu0)
+        if abs(objective_value) < 1e-4:
+            msg = (
+                f"\n{'='*40}\n"
+                f"[DMET] Converged to chemical potential:\n"
+                f"    {mu0}\n"
+                f"[DMET] Final total energy: {self.total_energies[-1]:.8f}\n"
+                f"{'='*40}\n"
+            )
+            print(msg)
+            return self.total_energies[-1]
         if singleshot:
             return self.total_energies[-1]
         objective_value1 = self.objective(mu1)
