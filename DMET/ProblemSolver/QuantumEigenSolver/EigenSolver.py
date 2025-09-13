@@ -5,228 +5,215 @@ from itertools import combinations
 from DMET.ProblemSolver import ProblemSolver
 from scipy.optimize import minimize
 import time 
+import concurrent.futures
+import threading
 
-try :
+try:
     import cudaq
     import cudaq_solvers as solvers
-except:
+except ImportError:
     pass
-# cudaq = lazy_import.lazy_module("cudaq")
-# solvers = lazy_import.lazy_module("cudaq_solvers")
 
+# --- Standalone Functions ---
+def ensure_real_coefficients(qubit_ham):
+    for term in qubit_ham.terms:
+        if qubit_ham.terms[term].imag > 1e-10:
+            raise ValueError("Imaginary coefficients found in the Hamiltonian, which is not allowed.")
+        qubit_ham.terms[term] = qubit_ham.terms[term].real
+    return qubit_ham
 
-class EigenSolver(ProblemSolver):
-    def with_default_kwargs(defaults):
-        def decorator(func):
-            def wrapper(*args,**kwargs):
-                for key, value in defaults.items():
-                    kwargs.setdefault(key, value)
-                return func(*args,**kwargs)
-            return wrapper
-        return decorator
-    
-    @with_default_kwargs({'async_observe' : False, 'mode' : 'classical', 'hybridtest': False})
-    def __init__(self, depth = 2, **simulate_options):
-        super().__init__()
-        self.i = 0
-        self.depth = depth
-        self.num_qpus = cudaq.get_target().num_qpus()
-        self.simulate_options = simulate_options
-    
-    def make_ansatz(self,n_qubits, number_of_electrons=None, depth = 1, mode = 'cudaq-vqe'):
-        assert number_of_electrons is not None, "number_of_electrons must be provided"
-        assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
-        assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
-        
-        @cudaq.kernel
-        def kernel(params: list[float]):
-            qubits = cudaq.qvector(n_qubits)
-            for i in range(number_of_electrons):
-                x(qubits[i])
-            param_idx = 0
-            
-            for j in range(depth):
-                for k in range(n_qubits):
-                    for i in range(n_qubits):
-                        if i > k :
-                            cx(qubits[(k) % n_qubits], qubits[i])
-                            rz(params[param_idx + 0], qubits[(k) % n_qubits])
-                            rz(np.pi, qubits[(k) % n_qubits])
-                            ry(params[param_idx + 1], qubits[(k) % n_qubits])
-                            ry(np.pi / 2, qubits[(k) % n_qubits])
-                            cx(qubits[i], qubits[(k) % n_qubits])
-                            ry(-np.pi / 2, qubits[(k) % n_qubits])
-                            ry(-params[param_idx + 1], qubits[(k) % n_qubits])
-                            rz(-np.pi, qubits[(k) % n_qubits])
-                            rz(-params[param_idx + 0], qubits[(k) % n_qubits])
-                            cx(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
-                            cz(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
-                            param_idx += 2
-        num_params = n_qubits * (n_qubits-1) * depth
-        
-        @cudaq.kernel
-        def kernel_no_params():
-            qubits = cudaq.qvector(n_qubits)
-            for i in range(number_of_electrons):
-                x(qubits[i])
-        
-        if mode in ['classical','cudaq-vqe','cudaqx-vqe']:
-            kernel_r =  kernel
+def make_ansatz(n_qubits, number_of_electrons=None, depth=1, mode='cudaq-vqe'):
+    assert number_of_electrons is not None, "number_of_electrons must be provided"
+    assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
+    assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
+
+    @cudaq.kernel
+    def kernel(params: list[float]):
+        qubits = cudaq.qvector(n_qubits)
+        for i in range(number_of_electrons):
+            x(qubits[i])
+        param_idx = 0
+        for j in range(depth):
+            for k in range(n_qubits):
+                for i in range(n_qubits):
+                    if i > k:
+                        cx(qubits[(k) % n_qubits], qubits[i])
+                        rz(params[param_idx + 0], qubits[(k) % n_qubits])
+                        rz(np.pi, qubits[(k) % n_qubits])
+                        ry(params[param_idx + 1], qubits[(k) % n_qubits])
+                        ry(np.pi / 2, qubits[(k) % n_qubits])
+                        cx(qubits[i], qubits[(k) % n_qubits])
+                        ry(-np.pi / 2, qubits[(k) % n_qubits])
+                        ry(-params[param_idx + 1], qubits[(k) % n_qubits])
+                        rz(-np.pi, qubits[(k) % n_qubits])
+                        rz(-params[param_idx + 0], qubits[(k) % n_qubits])
+                        cx(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
+                        cz(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
+                        param_idx += 2
+    num_params = n_qubits * (n_qubits - 1) * depth
+
+    @cudaq.kernel
+    def kernel_no_params():
+        qubits = cudaq.qvector(n_qubits)
+        for i in range(number_of_electrons):
+            x(qubits[i])
+
+    if mode in ['classical', 'cudaq-vqe', 'cudaqx-vqe']:
+        kernel_r = kernel
+    else:
+        kernel_r = kernel_no_params
+    return kernel_r, num_params
+
+def get_rdm(kernel, opt_params, number_of_orbitals, simulate_options, i=0, num_qpus=1, N=None):
+    if simulate_options.get("async_observe", False):
+        if simulate_options.get("hybridtest", False):
+            cudaq.set_target('nvidia', option='mqpu')
+    one_rdm = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
+    vals = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
+    for p in range(number_of_orbitals):
+        for q in range(number_of_orbitals):
+            op = FermionOperator(f"{p}^ {q}") + FermionOperator(f"{q}^ {p}")
+            spin_op = cudaq.SpinOperator(ensure_real_coefficients(jordan_wigner(op)))
+            if not simulate_options.get("async_observe", False):
+                vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
+            else:
+                vals[p][q] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id=i % num_qpus)
+                i += 1
+    time.sleep(0)
+    for p in range(number_of_orbitals):
+        for q in range(number_of_orbitals):
+            if not simulate_options.get("async_observe", False):
+                val = vals[p][q]
+            else:
+                val = vals[p][q].get().expectation()
+            one_rdm[p, q] = val / 2
+    two_rdm = np.zeros((number_of_orbitals, number_of_orbitals, number_of_orbitals, number_of_orbitals), dtype=np.complex128)
+    vals = np.zeros((number_of_orbitals, number_of_orbitals, number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
+    for p in range(number_of_orbitals):
+        for q in range(number_of_orbitals):
+            for r in range(number_of_orbitals):
+                for s in range(number_of_orbitals):
+                    op1 = FermionOperator(f"{p}^ {q}^ {s} {r}")
+                    op2 = FermionOperator(f"{r}^ {s}^ {q} {p}")
+                    op = op1 + op2
+                    spin_op = cudaq.SpinOperator(ensure_real_coefficients(jordan_wigner(op)))
+                    if not simulate_options.get("async_observe", False):
+                        vals[p][q][r][s] = cudaq.observe(kernel, spin_op, opt_params).expectation()
+                    else:
+                        vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id=i % num_qpus)
+                        i += 1
+    for p in range(number_of_orbitals):
+        for q in range(number_of_orbitals):
+            for r in range(number_of_orbitals):
+                for s in range(number_of_orbitals):
+                    if not simulate_options.get("async_observe", False):
+                        val = vals[p][q][r][s]
+                    else:
+                        val = vals[p][q][r][s].get().expectation()
+                    two_rdm[p, r, q, s] = val / 2
+    if simulate_options.get("hybridtest", False):
+        import os
+        if N is not None:
+            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(N - 2)
+            cudaq.set_target('nvidia', option='mgpu')
+    return one_rdm, two_rdm
+
+def _solve(hamiltonian, number_of_orbitals, number_of_electrons, depth=2, simulate_options=None, i=0, num_qpus=1):
+    if simulate_options is None:
+        simulate_options = {}
+    if not isinstance(hamiltonian, FermionOperator):
+        raise TypeError("Hamiltonian must be a FermionOperator")
+    if not (num_qpus > 1):
+        simulate_options["async_observe"] = False
+    N = number_of_orbitals
+    if simulate_options.get("hybridtest", False):
+        import os
+        os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(N - 2)
+        cudaq.set_target('nvidia', option='mgpu')
+    cudaq_ham = cudaq.SpinOperator(ensure_real_coefficients(jordan_wigner(hamiltonian)))
+    kernel, params = make_ansatz(number_of_orbitals, number_of_electrons, depth=depth, mode=simulate_options.get("mode", "classical"))
+    def cost_function(opt_params):
+        if not simulate_options.get("async_observe", False):
+            energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
         else:
-            kernel_r = kernel_no_params
-        return kernel_r, num_params
+            nonlocal i
+            energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id=i % num_qpus)
+            i += 1
+            energy = energy.get().expectation()
+        return energy.real
+    initial_params = [np.random.random() for _ in range(params)]
+    if simulate_options.get("mode", "classical") == "classical":
+        result = minimize(cost_function, initial_params, method='COBYLA', options={'rhobeg': 0.5, 'maxiter': 500})
+        opt_params = result.x
+        energy = 0
+    elif simulate_options.get("mode") == "cudaq-vqe":
+        optimizer = cudaq.optimizers.COBYLA()
+        energy, opt_params = cudaq.vqe(kernel, cudaq_ham, optimizer, len(initial_params))
+    elif simulate_options.get("mode") == "cudaqx-vqe":
+        initialX = [np.random.random() for _ in range(params)]
+        energy, opt_params, all_data = solvers.vqe(kernel, cudaq_ham, initialX, optimizer=minimize, method='COBYLA')
+    one_rdm, two_rdm = get_rdm(kernel, opt_params, number_of_orbitals, simulate_options, i=i, num_qpus=num_qpus, N=N)
+    return energy, one_rdm, two_rdm
 
-    def solve(self, hamiltonian: FermionOperator, number_of_orbitals: int,
-              number_of_electrons: int, **kwargs):
-        import time
-        # print(time.time())
-        if not isinstance(hamiltonian, FermionOperator):
-            raise TypeError("Hamiltonian must be a FermionOperator")
-        
-        if not(self.num_qpus > 1):
-            self.simulate_options["async_observe"] = False
-        if self.simulate_options["hybridtest"] == True:
-            import os
-            self.N = number_of_orbitals
-            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2)
-            cudaq.set_target('nvidia', option='mgpu')
-        # import cudaq
-        cudaq_ham = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(hamiltonian)))
-        # Step 2: Define particle-number-conserving ASWAP ansatz
-        
-        kernel, params = self.make_ansatz(number_of_orbitals, number_of_electrons, depth = self.depth, mode = self.simulate_options["mode"])
-        self.N = number_of_orbitals
+def _cudaq_preheat():
+    # 預熱 CUDA context，減少第一次 kernel 啟動延遲
+    try:
+        @cudaq.kernel
+        def warmup():
+            q = cudaq.qvector(1)
+            pass
+        cudaq.observe(warmup, cudaq.SpinOperator('Z0'), [0.0])
+    except Exception:
+        pass
 
-        def cost_function(opt_params):
-            if self.simulate_options["async_observe"] == False:
-                energy = cudaq.observe(kernel, cudaq_ham, opt_params).expectation()
+# --- Class Wrapper ---
+class EigenSolver(ProblemSolver):
+    def __init__(self, depth=2, **simulate_options):
+        super().__init__()
+        self.depth = depth
+        try:
+            self.num_qpus = cudaq.get_target().num_qpus()
+        except Exception:
+            self.num_qpus = 1
+        self.simulate_options = simulate_options
+        self.pools = [concurrent.futures.ProcessPoolExecutor(max_workers=1),
+                      concurrent.futures.ProcessPoolExecutor(max_workers=1)]
+        self.next_pool_idx = 0
+        self._background_rebuild_thread = None
+        # 預熱兩個 pool
+        for pool in self.pools:
+            pool.submit(_cudaq_preheat)
 
-            if self.simulate_options["async_observe"] == True:
-                energy = cudaq.observe_async(kernel, cudaq_ham, opt_params, qpu_id = self.i % self.num_qpus)
-                self.i += 1
-                energy = energy.get().expectation()
-            return energy.real
+    def _background_rebuild(self, idx):
+        # 關閉舊 pool，重建新 pool 並預熱
+        try:
+            self.pools[idx].shutdown(wait=True, cancel_futures=True)
+        except Exception:
+            pass
+        self.pools[idx] = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+        self.pools[idx].submit(_cudaq_preheat)
 
-        # Step 1: Optimize the ansatz parameters
-        initial_params = [np.random.random() for i in range(params)]  # Random initial parameters
-        if self.simulate_options["mode"] == "classical":
-            
-            result = minimize(
-                cost_function,
-                initial_params,
-                method='COBYLA',
-                options={'rhobeg': 0.5, 'maxiter': 500}
-            )
-            
-            opt_params = result.x
-            energy = 0
-        
-        elif self.simulate_options["mode"] == "cudaq-vqe":
-            optimizer = cudaq.optimizers.COBYLA()
-            energy, opt_params = cudaq.vqe(
-                kernel,
-                cudaq_ham,
-                optimizer,
-                len(initial_params),
-            )
+    def solve(self, hamiltonian, number_of_orbitals, number_of_electrons, **kwargs):
+        pool_idx = self.next_pool_idx
+        future = self.pools[pool_idx].submit(
+            _solve,
+            hamiltonian,
+            number_of_orbitals,
+            number_of_electrons,
+            self.depth,
+            self.simulate_options,
+            0,
+            self.num_qpus
+        )
+        # 背景重建另一個 pool
+        rebuild_idx = 1 - pool_idx
 
-        elif self.simulate_options["mode"] == "cudaqx-vqe":
-            #optimizer = cudaq.optimizers.COBYLA()
-            initialX = [np.random.random() for i in range(params)]
-            energy, opt_params, all_data = solvers.vqe(
-                kernel,
-                cudaq_ham, 
-                initialX, 
-                optimizer = minimize,
-                method='COBYLA'
-            )
-        
-        # Step 4: Compute 1-RDM
-        import time
-        # print(time.time())
-        one_rdm, two_rdm = self.get_rdm(kernel, opt_params, number_of_orbitals)
-        # print(time.time())
-        return energy, one_rdm, two_rdm
-
-    def ensure_real_coefficients(self,qubit_ham):
-        for term in qubit_ham.terms:
-        #    print(f"Term: {term}, Coefficient: {qubit_ham.terms[term]}")
-            if qubit_ham.terms[term].imag > 1e-10:
-                raise ValueError("Imaginary coefficients found in the Hamiltonian, which is not allowed.")
-            qubit_ham.terms[term] = qubit_ham.terms[term].real  # Ensure coefficients are real
-        return qubit_ham
-    
-    def get_rdm(self, kernel, opt_params, number_of_orbitals):
-        if self.simulate_options["async_observe"] == True:
-            if self.simulate_options["hybridtest"] == True:
-                cudaq.set_target('nvidia', option='mqpu')
-        import numpy as np
-        from openfermion import FermionOperator
-        from openfermion.transforms import jordan_wigner
-        # import cudaq
-        one_rdm = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
-
-        vals = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
-
-        for p in range(number_of_orbitals):
-            for q in range(number_of_orbitals):
-                # Hermitian symmetrization
-                op = FermionOperator(f"{p}^ {q}") + FermionOperator(f"{q}^ {p}")
-                spin_op = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(op)))
-                if self.simulate_options["async_observe"] == False:
-                    vals[p][q] = cudaq.observe(kernel, spin_op, opt_params).expectation()
-                if self.simulate_options["async_observe"] == True:
-                    #if self.simulate_options["hybridtest"] == True:
-                        #cudaq.set_target('nvidia', option='mqpu')
-                    vals[p][q] =cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
-                    self.i += 1
-                    
-        time.sleep(0)  # pass the control to the event loop
-        for p in range(number_of_orbitals):
-            for q in range(number_of_orbitals):
-                if self.simulate_options["async_observe"] == False:
-                    val = vals[p][q]
-                if self.simulate_options["async_observe"] == True:
-                    val = vals[p][q].get().expectation()
-                one_rdm[p, q] = val/2
-
-        two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
-                            number_of_orbitals, number_of_orbitals), dtype=np.complex128)
-
-        vals = np.zeros((number_of_orbitals, number_of_orbitals,
-                        number_of_orbitals, number_of_orbitals), dtype=np.dtype(object))
-
-        for p in range(number_of_orbitals):
-            for q in range(number_of_orbitals):
-                for r in range(number_of_orbitals):
-                    for s in range(number_of_orbitals):
-                        # Hermitian symmetrization of two-body operator
-                        op1 = FermionOperator(f"{p}^ {q}^ {s} {r}")
-                        op2 = FermionOperator(f"{r}^ {s}^ {q} {p}")
-                        op = op1 + op2
-                        spin_op = cudaq.SpinOperator(self.ensure_real_coefficients(jordan_wigner(op)))
-                        if self.simulate_options["async_observe"] == False:
-                            vals[p][q][r][s] = cudaq.observe(kernel, spin_op, opt_params).expectation()
-                        if self.simulate_options["async_observe"] == True:
-                            vals[p][q][r][s] = cudaq.observe_async(kernel, spin_op, opt_params, qpu_id = self.i % self.num_qpus)
-                            self.i += 1
-                            
-        
-        for p in range(number_of_orbitals):
-            for q in range(number_of_orbitals):
-                for r in range(number_of_orbitals):
-                    for s in range(number_of_orbitals):
-                        if self.simulate_options["async_observe"] == False:
-                            val = vals[p][q][r][s]
-                        if self.simulate_options["async_observe"] == True:
-                            val = vals[p][q][r][s].get().expectation()
-                        two_rdm[p, r, q, s] = val / 2
-        if self.simulate_options["hybridtest"] == True:
-            import os
-            os.environ["CUDAQ_MGPU_NQUBITS_THRESH"] = str(self.N-2) 
-            cudaq.set_target('nvidia', option='mgpu')
-        return one_rdm, two_rdm
-
+        self._background_rebuild_thread = threading.Thread(target=self._background_rebuild, args=(rebuild_idx,))
+        self._background_rebuild_thread.daemon = True
+        self._background_rebuild_thread.start()
+        self.next_pool_idx = rebuild_idx
+        self._background_rebuild_thread.join()
+        return future.result()
 
 if __name__ == "__main__":
     # Example usage
