@@ -194,6 +194,31 @@ class EigenSolver(ProblemSolver):
         self.pools[idx].submit(_cudaq_preheat)
 
     def solve(self, hamiltonian, number_of_orbitals, number_of_electrons, **kwargs):
+        
+        if number_of_electrons == 0:
+            # Vacuum state
+            energy = 0  # extract constant part
+            one_rdm = np.zeros((number_of_orbitals, number_of_orbitals))
+            two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
+                                number_of_orbitals, number_of_orbitals))
+            return energy, one_rdm, two_rdm
+        
+        elif number_of_electrons == number_of_orbitals:  
+            hamiltonian_sparse = self._transform_hamiltonian_to_matrix(hamiltonian, number_of_orbitals, number_of_electrons)
+            energy = hamiltonian_sparse[0, 0].real 
+            one_rdm = np.eye(number_of_orbitals)
+            two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
+                                number_of_orbitals, number_of_orbitals))
+            # fill two_rdm properly if needed, e.g., fully occupied
+            for p in range(number_of_orbitals):
+                for q in range(number_of_orbitals):
+                    for r in range(number_of_orbitals):
+                        for s in range(number_of_orbitals):
+                            if p == q and r == s:
+                                two_rdm[p, q, r, s] = 1.0 
+            # print(two_rdm)  
+            return energy, one_rdm, two_rdm
+        
         pool_idx = self.next_pool_idx
         future = self.pools[pool_idx].submit(
             _solve,
