@@ -101,7 +101,21 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         # Create 'even-then-odd' filling order
         even_idx = idx[::2]
         odd_idx = idx[1::2]
-        filling_order = np.concatenate([even_idx, odd_idx])
+        # filling_order = np.concatenate([even_idx, odd_idx])
+        filling_order = []
+        for i in range(len(even_idx)):
+            if i % 2 == 0:
+                filling_order.append(even_idx[i])
+            else:
+                filling_order.append(odd_idx[i])
+        for i in range(len(even_idx)):
+            if i % 2 == 1:
+                filling_order.append(even_idx[i])
+            else: 
+                filling_order.append(odd_idx[i])
+                
+        filling_order = np.array(filling_order)
+        
     
         # Select the first number_of_electrons orbitals in this order
         selected_idx = filling_order[:number_of_electrons]
