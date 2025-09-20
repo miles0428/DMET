@@ -7,6 +7,7 @@ from scipy.optimize import minimize
 import time 
 import concurrent.futures
 import threading
+from scipy.sparse import csc_array
 
 try:
     import cudaq
@@ -192,6 +193,26 @@ class EigenSolver(ProblemSolver):
             pass
         self.pools[idx] = concurrent.futures.ProcessPoolExecutor(max_workers=1)
         self.pools[idx].submit(_cudaq_preheat)
+        
+    def _transform_hamiltonian_to_matrix(self, hamiltonian, number_of_orbitals, number_of_electrons=None) -> csc_array:
+        """
+        Convert a FermionOperator Hamiltonian into sparse matrix form.
+
+        Args:
+            hamiltonian (FermionOperator): The fermionic Hamiltonian.
+            number_of_orbitals (int): Total number of spin-orbitals.
+
+        Returns:
+            csc_array: Sparse matrix representation of the Hamiltonian.
+
+        Main Concept:
+            Transforms the second-quantized Hamiltonian into a sparse matrix representation for numerical calculations.
+        """
+        from openfermion.linalg import get_ground_state, get_sparse_operator, get_number_preserving_sparse_operator
+        if number_of_electrons is not None:
+            return get_number_preserving_sparse_operator(hamiltonian, number_of_orbitals, number_of_electrons)
+        else:
+            return get_sparse_operator(hamiltonian, n_qubits=number_of_orbitals)
 
     def solve(self, hamiltonian, number_of_orbitals, number_of_electrons, **kwargs):
         
