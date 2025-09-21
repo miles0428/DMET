@@ -26,11 +26,14 @@ setup(
         "numpy",
         "scipy >= 1.15.0",
         "openfermion",
-        #"cudaq",
-        "tqdm" ,
+        "tqdm",
+        "filelock",
+        "joblib",
+        "h5py",
+        "openfermionpyscf",
         "pyscf >= 2.9.0",
-        'joblib',# Added dependency,
-        'filelock', # Added dependency
+        "cudaq",           # 若未啟用可註解
+        "cudaq_solvers",   # 若未啟用可註解
     ],
     entry_points={
         "console_scripts": [
