@@ -6,14 +6,14 @@ except ImportError:
     from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 
 class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=200, **kwargs):
+    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=300, **kwargs):
         super().__init__(N_cells, t1, t2, number_of_electrons, PBC, alpha)
         self.U = U
         self.tol = tol
         self.max_iter = max_iter
         self.density_matrix = None
 
-    def run_hf(self):
+    def run_hf(self, alpha = 0.2):
         L = 2 * self.N_cells
         dim = 2 * L
         H0 = self.get_hamiltonian()
@@ -42,7 +42,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
 
             # Check convergence
             delta = np.linalg.norm(D_new - D)
-            D = D_new
+            D = D_new* alpha + D * (1 - alpha)
             if delta < self.tol:
                 break
         else:
@@ -56,22 +56,22 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         e_hf = np.sum(e_vals[idx]) - 0.5 * self.U * sum(D[2*i, 2*i].real * D[2*i+1, 2*i+1].real for i in range(L))
         return e_hf
 
-    def get_density_matrix(self):
+    def get_density_matrix(self, hf_update_rate=0.2):
         """
         Compute or retrieve the HF one-body density matrix for DMET.
         If HF has not been run yet, run it automatically.
         """
         if self.density_matrix is None:
-            self.run_hf()
+            self.run_hf(alpha=hf_update_rate)
         return self.density_matrix
 
-    def get_slater(self):
+    def get_slater(self, hf_update_rate=0.2):
         """
         Return the HF Slater determinant orbitals.
         Automatically runs HF if needed.
         """
         if self._wavefunction is None:
-            self.run_hf()
+            self.run_hf(alpha=hf_update_rate)
         return self._wavefunction
 
 
