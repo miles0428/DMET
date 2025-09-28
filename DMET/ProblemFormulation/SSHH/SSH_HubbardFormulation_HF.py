@@ -13,7 +13,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         self.max_iter = max_iter
         self.density_matrix = None
 
-    def run_hf(self, alpha = 0.2):
+    def run_hf(self, alpha = 0.1):
         L = 2 * self.N_cells
         dim = 2 * L
         H0 = self.get_hamiltonian()
@@ -56,7 +56,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         e_hf = np.sum(e_vals[idx]) - 0.5 * self.U * sum(D[2*i, 2*i].real * D[2*i+1, 2*i+1].real for i in range(L))
         return e_hf
 
-    def get_density_matrix(self, hf_update_rate=0.2):
+    def get_density_matrix(self, hf_update_rate=0.1):
         """
         Compute or retrieve the HF one-body density matrix for DMET.
         If HF has not been run yet, run it automatically.
@@ -65,7 +65,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
             self.run_hf(alpha=hf_update_rate)
         return self.density_matrix
 
-    def get_slater(self, hf_update_rate=0.2):
+    def get_slater(self, hf_update_rate=0.1):
         """
         Return the HF Slater determinant orbitals.
         Automatically runs HF if needed.
