@@ -151,8 +151,11 @@ def _solve(hamiltonian, number_of_orbitals, number_of_electrons, depth=2, simula
         optimizer = cudaq.optimizers.COBYLA()
         energy, opt_params = cudaq.vqe(kernel, cudaq_ham, optimizer, len(initial_params))
     elif simulate_options.get("mode") == "cudaqx-vqe":
+        from functools import partial
         initialX = [np.random.random() for _ in range(params)]
-        energy, opt_params, all_data = solvers.vqe(kernel, cudaq_ham, initialX, optimizer=minimize, method='COBYLA')
+        minimizer_options = {'maxiter': 4000}
+        minimize_partial = partial(minimize, options = minimizer_options)
+        energy, opt_params, all_data = solvers.vqe(kernel, cudaq_ham, initialX, optimizer=minimize_partial, method='COBYLA')
     one_rdm, two_rdm = get_rdm(kernel, opt_params, number_of_orbitals, simulate_options, i=i, num_qpus=num_qpus, N=N)
     return energy, one_rdm, two_rdm
 
