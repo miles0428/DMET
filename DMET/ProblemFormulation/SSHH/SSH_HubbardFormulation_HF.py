@@ -6,7 +6,7 @@ except ImportError:
     from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 
 class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=1000, **kwargs):
+    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, **kwargs):
         super().__init__(N_cells, t1, t2, number_of_electrons, PBC, alpha)
         self.U = U
         self.tol = tol
@@ -56,7 +56,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         e_hf = np.sum(e_vals[idx]) - 0.5 * self.U * sum(D[2*i, 2*i].real * D[2*i+1, 2*i+1].real for i in range(L))
         return e_hf
 
-    def get_density_matrix(self, hf_update_rate=0.65):
+    def get_density_matrix(self, hf_update_rate=0.1):
         """
         Compute or retrieve the HF one-body density matrix for DMET.
         If HF has not been run yet, run it automatically.
