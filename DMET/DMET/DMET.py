@@ -587,7 +587,7 @@ class DMET:
                 f"{'='*40}\n"
             )
             print(msg)
-            result = newton(self.objective,x0=mu0, tol=1e-4, maxiter=1000, x1=mu1)
+            result = newton(self.objective,x0=mu0+0.00001, tol=1e-4, maxiter=50, x1=mu1+0.00001)
         elif objective_value * objective_value1 <= 0:
             print("571行開始自洽")
             result = root_scalar(self.objective, bracket=[mu0, mu1], method='brentq', xtol=1e-4, rtol=1e-4, maxiter=1000)
