@@ -1,13 +1,14 @@
 from openfermion import FermionOperator
 import numpy as np
 try:
+    # from .SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
     from .SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 except ImportError:
     from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 
 class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
     def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, **kwargs):
-        super().__init__(N_cells, t1, t2, number_of_electrons, PBC, alpha)
+        super().__init__(N_cells, t1, t2, U, number_of_electrons, PBC)
         self.U = U
         self.tol = tol
         self.max_iter = max_iter
@@ -23,6 +24,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         idx = np.argsort(eigenvals)[:self.number_of_electrons]
         # D = np.dot(eigenvecs[:, idx], eigenvecs[:, idx].conj().T)
         D = super().get_density_matrix()
+        # print("Initial density matrix:\n", D)
 
         for iteration in range(self.max_iter):
             # Build mean-field Hamiltonian
@@ -61,18 +63,18 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         Compute or retrieve the HF one-body density matrix for DMET.
         If HF has not been run yet, run it automatically.
         """
-        if self.density_matrix is None:
-            self.run_hf(alpha=hf_update_rate)
+        # if self.density_matrix is None:
+        self.run_hf(alpha=hf_update_rate)
         return self.density_matrix
 
-    def get_slater(self, hf_update_rate=0.65):
-        """
-        Return the HF Slater determinant orbitals.
-        Automatically runs HF if needed.
-        """
-        if self._wavefunction is None:
-            self.run_hf(alpha=hf_update_rate)
-        return self._wavefunction
+    # def get_slater(self, hf_update_rate=0.65):
+    #     """
+    #     Return the HF Slater determinant orbitals.
+    #     Automatically runs HF if needed.
+    #     """
+    #     if self._wavefunction is None:
+    #         self.run_hf(alpha=hf_update_rate)
+    #     return self._wavefunction
 
 
 class ManyBodySSHHFormulation_HF(ManyBodySSHHFormulation):

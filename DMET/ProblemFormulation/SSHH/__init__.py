@@ -1,2 +1,3 @@
 from .SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 from .SSH_HubbardFormulation_HF import OneBodySSHHFormulation_HF, ManyBodySSHHFormulation_HF
+# from .SSH_HubbardFormulation_new_way import OneBodySSHHFormulation as OneBodySSHHFormulation
