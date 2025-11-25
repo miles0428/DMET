@@ -1,7 +1,7 @@
 from openfermion import FermionOperator
 import numpy as np
-# from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
-from DMET.ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+# from DMET.ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
 import itertools
 class OneBodySSHHFormulation(OneBodyProblemFormulation):
     def __init__(self, N_cells, t1, t2 , U, number_of_electrons, PBC):
@@ -139,11 +139,16 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
                 - e_ground (float): Total ground state energy.
                 - wavefunction (np.ndarray): Slater determinant wavefunction of shape (dim, number_of_electrons).
         """
-        self.number_of_electrons = number_of_electrons
         
+        self.number_of_electrons = number_of_electrons
+
         # 1. 如果還沒對角化，先做
         if self.eigenvalues is None:
             self.eigenvalues, self.eigenvectors = np.linalg.eigh(self.H)
+        if number_of_electrons == 0: 
+            # 如果沒有電子，能量為 0，密度矩陣為零矩陣
+            self._wavefunction = np.zeros((len(self.eigenvalues), 0))
+            return 0.0, self._wavefunction
         
         # 2. 如果還沒計算交互作用矩陣，先算 (這就是存下 energy pair 的步驟)
         if self.interaction_matrix is None:
