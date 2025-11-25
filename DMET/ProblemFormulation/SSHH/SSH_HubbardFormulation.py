@@ -1,66 +1,62 @@
 from openfermion import FermionOperator
 import numpy as np
-from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
-# from DMET.ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+# from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+from DMET.ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+import itertools
 class OneBodySSHHFormulation(OneBodyProblemFormulation):
     def __init__(self, N_cells, t1, t2 , U, number_of_electrons, PBC):
         """
-        Initialize the one-body Hubbard formulation.
+        Initialize the one-body SSH-Hubbard formulation with Brute Force Search capability.
 
         Args:
-            L (int): The number of lattice sites.
-            t1 (float): Hopping parameter for even number of sites. (0->1 in same lattice)
-            t2 (float): Hopping parameter for odd number of sites. (1->2 in different lattice)
-            number_of_electrons (int): The number of electrons in the system.
+            N_cells (int): Number of unit cells (each cell has 2 sites).
+            t1 (float): Hopping parameter for even bonds (intra-cell hopping).
+            t2 (float): Hopping parameter for odd bonds (inter-cell hopping).
+            U (float): On-site Coulomb interaction.
+            number_of_electrons (int): Number of electrons in the system.
+            PBC (bool): Whether to use periodic boundary conditions.
 
         Attributes:
-            L (int): Number of lattice sites.
-            t1 (float): Hopping parameter for even number of sites. (0->1 in same lattice)
-            t2 (float): Hopping parameter for odd number of sites. (1->2 in different lattice)
-            number_of_electrons (int): Number of electrons in the system.
-            H (FermionOperator): The one-body Hamiltonian.
-            _wavefunction (np.ndarray): The wavefunction of the system.
+            N_cells (int): Number of unit cells.
+            t1 (float): Hopping parameter for even bonds.
+            t2 (float): Hopping parameter for odd bonds.
+            U (float): On-site Coulomb interaction.
+            PBC (bool): Periodic boundary conditions flag.
+            number_of_electrons (int): Number of electrons.
+            H (np.ndarray): One-body Hamiltonian matrix.
+            eigenvalues (np.ndarray): Eigenvalues of the Hamiltonian (cached).
+            eigenvectors (np.ndarray): Eigenvectors of the Hamiltonian (cached).
+            interaction_matrix (np.ndarray): Precomputed interaction matrix for brute force search.
         """
         super().__init__()
         self.N_cells = N_cells
         self.t1 = t1
         self.t2 = t2
         self.PBC = PBC
+        self.U = U
+        self.number_of_electrons = number_of_electrons
+        
         self._wavefunction = None
         self.H = self.get_hamiltonian()
-        self.number_of_electrons = number_of_electrons
-        self.U = U
-        if not hasattr(self, 'pointer_high_odd'):
-            self.pointer_high_odd = 1
-        if not hasattr(self, 'pointer_high_even'):
-            self.pointer_high_even = 0
-        if not hasattr(self, 'pointer_low'):
-            self.pointer_low = 0
+        
+        # 用於緩存對角化結果與交互作用矩陣
+        self.eigenvalues = None
+        self.eigenvectors = None
+        self.interaction_matrix = None 
 
     def get_hamiltonian(self):
         """
         Construct the one-body Hamiltonian for the SSH-Hubbard model.
 
         Returns:
-            FermionOperator: The one-body Hamiltonian.
-
-        Main Concept:
-            The Hamiltonian is constructed as:
-                H = - \sum_{<i,j>,\sigma} (t1 * c_i^\dagger c_j + t2 * c_j^\dagger c_i)
-            where <i,j> denotes nearest neighbors and \sigma is the spin index.
+            np.ndarray: One-body Hamiltonian matrix of shape (2*L, 2*L) where L = 2*N_cells.
         """
-
-        """
-    One-body Hamiltonian with flat index ordering:
-    [site0_up, site0_dn, site1_up, site1_dn, ..., siteL-1_up, siteL-1_dn]
-    """
         L = 2 * self.N_cells  # total sites
         dim = 2 * L  # total orbitals (sites * spins)
 
         H = np.zeros((dim, dim), dtype=complex)
 
         for i in range(L):
-
             if self.PBC == True:
                 j = (i + 1) % L
             else:
@@ -83,174 +79,149 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
             H[q_dn, p_dn] = -t
 
         return H
-    
-    
-    
-    def get_slater(self, number_of_electrons):
+
+    def _calculate_pair_interaction(self, vec_i, vec_j):
         """
-        Diagonalize the one-body Hamiltonian and construct the Slater determinant wavefunction.
+        Calculate the interaction energy between two orbitals (U term).
 
         Args:
-            number_of_electrons (int): Number of electrons to occupy lowest energy orbitals.
+            vec_i (np.ndarray): Eigenvector for orbital i.
+            vec_j (np.ndarray): Eigenvector for orbital j.
 
         Returns:
-            e_ground (float): Total one-body ground state energy (sum of lowest eigenvalues).
-            wavefunction (np.ndarray): Slater determinant wavefunction of shape (4*L, number_of_electrons).
+            float: Pair interaction energy between the two orbitals.
         """
-        H = self.get_hamiltonian()
+        L = self.N_cells * 2
+        U_energy_pair = 0.0
         
-        # 對 one-body Hamiltonian 對角化
-        if not hasattr(self, 'eigenvalues') or not hasattr(self, 'eigenvectors'):
-            self.eigenvalues, self.eigenvectors = np.linalg.eigh(H)
-            # print("eigenvectors", self.eigenvectors)
+        # 預先計算密度分布
+        rho_i = np.abs(vec_i)**2
+        rho_j = np.abs(vec_j)**2
         
-        if not hasattr(self, 'idx'):
-            self.idx = np.argsort(self.eigenvalues)
-        
-        # print(self._wavefunction)
-        if not hasattr(self, '_wavefunction_stack'):
-            print("Initializing wavefunction storage.")
-            self._wavefunction_stack = []
-        
-        if not hasattr(self, 'chosen_indices'):
-            self.chosen_indices = []
-            self.non_chosen_indices = list(self.idx)
-        print("non_chosen_indices at start:", self.non_chosen_indices)
-        
-        if not hasattr(self, 'additional_energies'):
-            self.additional_energies = []
-        if number_of_electrons == 0 :
-            return 0.0, np.zeros((self.eigenvectors.shape[0],0))
-        print("number_of_electrons:", number_of_electrons)
-        print("len of wavefunction_stack before adding:", len(self._wavefunction_stack))
-        for _ in range(number_of_electrons - len(self._wavefunction_stack) if number_of_electrons > len(self._wavefunction_stack) else 0):
-            if len(self._wavefunction_stack) == 0:
-                chosen_index = self.idx[0]
-                print("Chosen index:", chosen_index)
-                self._wavefunction_stack.append(self.eigenvectors[:, chosen_index])
-                # print(np.array(self._wavefunction_stack).shape)
-                self.chosen_indices.append(0)
-                self.non_chosen_indices.remove(0)
-                self.pointer_low = min(self.non_chosen_indices)
-                self.pointer_high_even += 2
-                self.pointer_high_odd += 2
-                self.additional_energies.append(self.eigenvalues[chosen_index])
-                # print("Chosen index:", chosen_index)
-                # print("non_chosen_indices:", self.non_chosen_indices)
-            else:
-                # calculate U-interaction energy from the probability of chosen orbitals
-                wavefunction_high_even = self.eigenvectors[:, self.idx[self.pointer_high_even]] if self.pointer_high_even < len(self.idx) else None
-                wavefunction_high_odd = self.eigenvectors[:, self.idx[self.pointer_high_odd]] if self.pointer_high_odd < len(self.idx) else None
-                wavefunction_low = self.eigenvectors[:, self.idx[self.pointer_low]]
-                U_energy_even = self.calculate_U_from_wavefunction(wavefunction_high_even) if wavefunction_high_even is not None else float('inf')
-                U_energy_odd = self.calculate_U_from_wavefunction(wavefunction_high_odd) if wavefunction_high_odd is not None else float('inf')
-                U_energy_low = self.calculate_U_from_wavefunction(wavefunction_low)
-                Us = [U_energy_even, U_energy_odd, U_energy_low]
-                total_energy_even = self.eigenvalues[self.idx[self.pointer_high_even]] + U_energy_even if wavefunction_high_even is not None else float('inf')
-                total_energy_odd = self.eigenvalues[self.idx[self.pointer_high_odd]] + U_energy_odd if wavefunction_high_odd is not None else float('inf')
-                total_energy_low = self.eigenvalues[self.idx[self.pointer_low]]+ U_energy_low if wavefunction_low is not None else float('inf')
-                # find the minimum energy
-                energies = [total_energy_even, total_energy_odd, total_energy_low]
-                # print("--------------------")
-                # print("Energies:", energies)
-                # print("U energies:", Us)
+        for k in range(L):
+            p_up = 2 * k
+            p_dn = 2 * k + 1
+            
+            # U * (n_i_up * n_j_dn + n_i_dn * n_j_up)
+            # 這裡計算的是當兩個電子分別佔據軌域 i 和 j 時，在同一個格點上相遇(double occupancy)的能量
+            term = self.U * (rho_i[p_up] * rho_j[p_dn] + rho_i[p_dn] * rho_j[p_up])
+            U_energy_pair += term
+            
+        return U_energy_pair
 
-                indices = [self.pointer_high_even, self.pointer_high_odd, self.pointer_low]
-                min_energy_index = np.argmin(energies)
-                chosen_index = indices[min_energy_index]
-                self._wavefunction_stack.append(self.eigenvectors[:, self.idx[chosen_index]])
-                # print(self.pointer_high_even, self.pointer_high_odd, self.pointer_low)
-                # print("Chosen index:", chosen_index)
-                # print("non_chosen_indices:", self.non_chosen_indices)
-                # print("choices indices:", self.chosen_indices)
-                self.chosen_indices.append(chosen_index)
-                self.non_chosen_indices.remove(chosen_index)
-                # update pointers
-                if chosen_index == self.pointer_low:
-                    if self.non_chosen_indices:
-                        self.pointer_low = min(self.non_chosen_indices)
-                if chosen_index == self.pointer_high_even or chosen_index == self.pointer_high_odd:
-                    self.pointer_high_even += 2
-                    self.pointer_high_odd += 2
-                self.additional_energies.append(energies[min_energy_index])
-     
-                
-        # print(np.array(self._wavefunction_stack[:number_of_electrons]).shape)
-        # print(self.eigenvectors.shape)
-        wavefunction = np.column_stack(self._wavefunction_stack[:number_of_electrons])
-        e_ground = sum(self.additional_energies[:number_of_electrons])
-        self._wavefunction = wavefunction
+    def _precompute_interaction_matrix(self):
+        """
+        Precompute the interaction matrix for all orbital pairs and store in self.interaction_matrix.
+
+        The interaction matrix is symmetric and stores the pairwise interaction energies
+        between all eigenvector orbitals for use in brute force search.
+        """
+        dim = len(self.eigenvalues)
+        self.interaction_matrix = np.zeros((dim, dim))
         
+        print("Pre-computing interaction matrix for Brute Force...")
+        for i in range(dim):
+            for j in range(i + 1, dim):
+                val = self._calculate_pair_interaction(self.eigenvectors[:, i], self.eigenvectors[:, j])
+                self.interaction_matrix[i, j] = val
+                self.interaction_matrix[j, i] = val # 對稱矩陣
+        print("Pre-computation done.")
+
+    def get_slater(self, number_of_electrons):
+        """
+        Brute-force search for the ground state Slater determinant.
+        
+        Args:
+            number_of_electrons (int): Number of electrons.
+
+        Returns:
+            tuple: A tuple containing:
+                - e_ground (float): Total ground state energy.
+                - wavefunction (np.ndarray): Slater determinant wavefunction of shape (dim, number_of_electrons).
+        """
+        self.number_of_electrons = number_of_electrons
+        
+        # 1. 如果還沒對角化，先做
+        if self.eigenvalues is None:
+            self.eigenvalues, self.eigenvectors = np.linalg.eigh(self.H)
+        
+        # 2. 如果還沒計算交互作用矩陣，先算 (這就是存下 energy pair 的步驟)
+        if self.interaction_matrix is None:
+            self._precompute_interaction_matrix()
+            
+        dim = len(self.eigenvalues)
+        all_indices = range(dim)
+        
+        min_total_energy = float('inf')
+        best_combination = None
+        
+        # 3. 遍歷所有組合 (C^N_m)
+        # itertools.combinations 會產生排序好的 index tuple，例如 (0, 1, 2)
+        for indices in itertools.combinations(all_indices, number_of_electrons):
+            
+            # --- One-body Energy ---
+            # 直接加總特徵值
+            e_onebody = sum(self.eigenvalues[i] for i in indices)
+            
+            # --- Two-body Energy ---
+            # 查表加總
+            e_interaction = 0.0
+            
+            # 這裡把 tuple 轉 list 方便操作，雖然 tuple 也可以 iterate
+            current_indices = list(indices)
+            
+            # 雙重迴圈查表 (只查上三角即可，因為我們 matrix 是存兩倍或者對稱的)
+            # 這裡的邏輯：總能量 = Sum(E_onebody) + Sum_{i<j} (Pair_Interaction)
+            for i in range(len(current_indices)):
+                for j in range(i + 1, len(current_indices)):
+                    idx_a = current_indices[i]
+                    idx_b = current_indices[j]
+                    e_interaction += self.interaction_matrix[idx_a, idx_b]
+            
+            total_energy = e_onebody + e_interaction
+            
+            # 更新最小值
+            if total_energy < min_total_energy:
+                min_total_energy = total_energy
+                best_combination = current_indices
+
+        # 4. 構建最佳波函數與結果
+        # best_combination 是一組 index，例如 [0, 2, 3, 5]
+        # 我們從 eigenvectors 中取出這些行，堆疊成 (dim, m) 矩陣
+        wavefunction = np.column_stack([self.eigenvectors[:, i] for i in best_combination])
+        
+        # 更新 class 屬性
+        self._wavefunction = wavefunction
+        e_ground = min_total_energy
+        
+        print(f"Brute Force found best indices: {best_combination}")
         
         return e_ground, wavefunction
 
-    def calculate_U_from_wavefunction(self, wavefunction):
+    def next(self, number_of_electrons):
         """
-        Calculate the effective U interaction energy from the wavefunction which is chosen and also target wavefunction.
+        Update electron number (for consistency with original interface).
 
         Args:
-            wavefunction (np.ndarray): eigenvectors of the target
-        Returns:
-            float: The effective U interaction energy.
-        """
-        L = self.N_cells * 2
-        U_energy = 0.0
-        for wave_const in self._wavefunction_stack:
-            # w = [site0_up, site0_dn, site1_up, site1_dn, ..., siteL-1_up, siteL-1_dn]
-            # wavefunction = [site0_up, site0_dn, site1_up, site1_dn, ..., siteL-1_up, siteL-1_dn]
-            # wave_const and wavefunction are not the same
-            # Calculate double occupancy contribution
-            wave_const = wave_const / np.linalg.norm(wave_const).reshape(-1)
-            wavefunction = wavefunction / np.linalg.norm(wavefunction).reshape(-1)
-            # print("wave_const:", wave_const)
-            # print("wavefunction:", wavefunction)
-            for i in range(L):
-                p_up = 2 * i
-                p_dn = 2 * i + 1
-                # Probability of finding electron at same site with opposite spins at the same time
-                p_up_coeff = wave_const[p_up]
-                p_dn_coeff = wave_const[p_dn]
-                p_up_wf_coeff = wavefunction[p_up]
-                p_dn_wf_coeff = wavefunction[p_dn]
-                n_up = round(np.abs(p_up_coeff)**2 ,3)
-                n_dn = round(np.abs(p_dn_coeff)**2,3)
-                n_up_wf = round(np.abs(p_up_wf_coeff)**2,3)
-                n_dn_wf = np.abs(p_dn_wf_coeff)**2
-                # because if double occupancy happens, both spin-up and spin-down must be present
-                # print(f"Site {i}: n_up={n_up}, n_dn={n_dn}, n_up_wf={n_up_wf}, n_dn_wf={n_dn_wf}")
-                U_energy += self.U *(n_up * n_dn_wf + n_dn * n_up_wf)
-        return U_energy
-            
-
-    def next(self,number_of_electrons):
-        """
-        Iterator to next number of electrons.
-
-        Args:
-            number_of_electrons (int): Number of electrons to occupy lowest energy orbitals.
-        Returns:
-            None
+            number_of_electrons (int): New number of electrons to set.
         """
         self.number_of_electrons = number_of_electrons
+        self._wavefunction = None  # 重置波函數
         
     def get_density_matrix(self):
         """
         Compute the one-body reduced density matrix.
 
         Returns:
-            np.ndarray: The one-body reduced density matrix.
-
-        Main Concept:
-            The density matrix is computed as:
-                γ = ψ ψ†
-            where ψ is the wavefunction.
+            np.ndarray: The one-body reduced density matrix γ = ψψ†.
         """
-        # Get wavefunctions
-        _, self._wavefunction_weak = self.get_slater(self.number_of_electrons)
-        # Diagonal terms
-        rdm_weak = np.dot(self._wavefunction_weak, self._wavefunction_weak.conjugate().T)
-        # Final 1-RDM
-        return rdm_weak 
+        # 確保有波函數
+        if self._wavefunction is None:
+             self.get_slater(self.number_of_electrons)
+             
+        # γ = ψ ψ†
+        rdm = np.dot(self._wavefunction, self._wavefunction.conjugate().T)
+        return rdm
 
 class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
     def __init__(self, N_cells, t1, t2, U, PBC):
@@ -262,10 +233,15 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
             t1 (float): Hopping parameter for even bonds (intra-cell hopping).
             t2 (float): Hopping parameter for odd bonds (inter-cell hopping).
             U (float): On-site Coulomb interaction.
+            PBC (bool): Whether to use periodic boundary conditions.
 
         Attributes:
+            N_cells (int): Number of unit cells.
             L (int): Total number of sites = 2 * N_cells.
-            dim (int): Total number of orbitals (including spin).
+            t1 (float): Hopping parameter for even bonds.
+            t2 (float): Hopping parameter for odd bonds.
+            U (float): On-site Coulomb interaction.
+            PBC (bool): Periodic boundary conditions flag.
             H (FermionOperator): Many-body Hamiltonian.
             onebody_terms (np.ndarray): One-body hopping matrix.
             twobody_terms (np.ndarray): Two-body interaction tensor.
@@ -284,10 +260,10 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
         Construct the many-body Hamiltonian for SSH-Hubbard model.
 
         Returns:
-            Tuple[FermionOperator, np.ndarray, np.ndarray]:
-                - H: FermionOperator representing the Hamiltonian.
-                - onebody_terms: (2L x 2L) hopping matrix.
-                - twobody_terms: (2L x 2L x 2L x 2L) interaction tensor.
+            tuple: A tuple containing:
+                - H (FermionOperator): FermionOperator representing the Hamiltonian.
+                - onebody_terms (np.ndarray): One-body hopping matrix of shape (2L, 2L).
+                - twobody_terms (np.ndarray): Two-body interaction tensor of shape (2L, 2L, 2L, 2L).
         """
         dim = 2 * self.L  # include spin
         H = FermionOperator()
@@ -321,11 +297,11 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
 
 if __name__=="__main__":
     # --- 系統參數 ---
-    N_cells = 2      # 四個格點
+    N_cells = 6      # 四個格點
     t1 = 1.0            # SSH 模型 t1 hopping
     t2 = 0.5            # SSH 模型 t2 hopping
-    U = 4          # On-site interaction
-    number_of_electrons = 6
+    U = 10          # On-site interaction
+    number_of_electrons = 12
 
     # --- One-body problem ---
     onebody = OneBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U = U,number_of_electrons=number_of_electrons, PBC = True)
