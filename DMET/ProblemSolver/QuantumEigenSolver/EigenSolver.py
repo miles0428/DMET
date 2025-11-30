@@ -31,7 +31,9 @@ def make_ansatz(n_qubits, number_of_electrons=None, depth=1, mode='cudaq-vqe'):
     assert number_of_electrons is not None, "number_of_electrons must be provided"
     assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
     assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
-
+    
+    total_gates = math.comb(n_qubits,number_of_electrons)
+    
     @cudaq.kernel
     def kernel(params: list[float]):
         qubits = cudaq.qvector(n_qubits)
@@ -45,7 +47,6 @@ def make_ansatz(n_qubits, number_of_electrons=None, depth=1, mode='cudaq-vqe'):
                     x(qubits[(2*i)%n_qubits])
         
         param_idx = 0
-        total_gates = math.comb(n_qubits,number_of_electrons)
         i = 0
         even_start = True
         num_layers = 0
