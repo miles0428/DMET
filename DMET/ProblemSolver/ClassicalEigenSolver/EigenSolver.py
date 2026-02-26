@@ -11,33 +11,21 @@ class EigenSolver(ProblemSolver):
         super().__init__()
 
     def solve(self, hamiltonian, number_of_orbitals, number_of_electrons = None, **kwargs) -> tuple[float, ndarray, ndarray]:
-        """
-        Solve the problem defined by the Hamiltonian.
-
+        """Solve the ground state of a given Hamiltonian and compute the 1-RDM and 2-RDM.
         Args:
             hamiltonian (FermionOperator): The Hamiltonian to solve.
-            number_of_orbitals (int): The number of spin-orbitals in the system.
-            **kwargs: Additional arguments for the solver.
-
+            number_of_orbitals (int): The number of orbitals in the system.
+            number_of_electrons (int, optional): The number of electrons in the system.
         Returns:
-            tuple: (energy, one-body density matrix, two-body density matrix)
-
-        Main Concept:
-            Solves the eigenvalue problem for the Hamiltonian to find the ground state energy and density matrices.
-
-        Math Detail:
-            The eigenvalue problem is solved as:
-                H \psi = E \psi
-            The density matrices are computed from the ground state wavefunction \psi.
+            energy (float): The ground state energy.
+            one_rdm (ndarray): The 1-RDM of the ground state.
+            two_rdm (ndarray): The 2-RDM of the ground state.
         """
-        # print(hamiltonian)
         if not isinstance(hamiltonian, FermionOperator):
             raise TypeError("The Hamiltonian must be an instance of FermionOperator.")
-        # print("Number of orbitals:", number_of_orbitals)
-        # print("Number of electrons:", number_of_electrons)
+        
         if number_of_electrons == 0:
-            # Vacuum state
-            energy = 0  # extract constant part
+            energy = 0 
             one_rdm = np.zeros((number_of_orbitals, number_of_orbitals))
             two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
                                 number_of_orbitals, number_of_orbitals))
@@ -49,95 +37,61 @@ class EigenSolver(ProblemSolver):
             one_rdm = np.eye(number_of_orbitals)
             two_rdm = np.zeros((number_of_orbitals, number_of_orbitals,
                                 number_of_orbitals, number_of_orbitals))
-            # fill two_rdm properly if needed, e.g., fully occupied
             for p in range(number_of_orbitals):
                 for q in range(number_of_orbitals):
                     for r in range(number_of_orbitals):
                         for s in range(number_of_orbitals):
                             if p == q and r == s:
                                 two_rdm[p, q, r, s] = 1.0 
-            # print(two_rdm)  
             return energy, one_rdm, two_rdm
         
         hamiltonian_sparse = self._transform_hamiltonian_to_matrix(hamiltonian, number_of_orbitals, number_of_electrons)
-        # print("Hamiltonian matrix shape:", hamiltonian_sparse)
         energy, eigenstate = get_ground_state(hamiltonian_sparse, **kwargs)
-        psi = eigenstate.ravel()  # Convert sparse vector to dense
-        one_rdm = self._get_one_body_density_matrix(psi, number_of_orbitals, number_of_electrons)
-        two_rdm = self._get_two_body_density_matrix(psi, number_of_orbitals, number_of_electrons)
+        psi = eigenstate.ravel()
+        
+        # 測量優化演算法計算 RDM 的時間
+        one_rdm, two_rdm = self._get_rdms_tensorized(psi, number_of_orbitals, number_of_electrons)
+        
         return energy, one_rdm, two_rdm
 
     def _transform_hamiltonian_to_matrix(self, hamiltonian, number_of_orbitals, number_of_electrons=None) -> csc_array:
-        """
-        Convert a FermionOperator Hamiltonian into sparse matrix form.
-
-        Args:
-            hamiltonian (FermionOperator): The fermionic Hamiltonian.
-            number_of_orbitals (int): Total number of spin-orbitals.
-
-        Returns:
-            csc_array: Sparse matrix representation of the Hamiltonian.
-
-        Main Concept:
-            Transforms the second-quantized Hamiltonian into a sparse matrix representation for numerical calculations.
-        """
         if number_of_electrons is not None:
             return get_number_preserving_sparse_operator(hamiltonian, number_of_orbitals, number_of_electrons)
         else:
             return get_sparse_operator(hamiltonian, n_qubits=number_of_orbitals)
     
-    def _get_one_body_density_matrix(self, psi: np.ndarray, number_of_orbitals: int, number_of_electrons =None) -> ndarray:
+    def _get_rdms_tensorized(self, psi: np.ndarray, number_of_orbitals: int, number_of_electrons=None):
+        """Compute the 1-RDM and 2-RDM using a tensorized approach to avoid O(N^4) loops.
+            This method constructs an intermediate tensor of single excitations and then uses einsum to compute the 2-RDM efficiently.
+            Args:
+                psi (ndarray): The ground state wavefunction as a vector.
+                number_of_orbitals (int): The number of orbitals in the system.
+                number_of_electrons (int, optional): The number of electrons in the system.
+            Returns:
+                one_rdm (ndarray): The computed 1-RDM.
+                two_rdm (ndarray): The computed 2-RDM.
         """
-        Compute the one-body density matrix from the eigenstate.
-
-        Args:
-            psi (ndarray): Dense ground-state vector.
-            number_of_orbitals (int): Number of spin-orbitals.
-
-        Returns:
-            ndarray: 1-RDM of shape (n, n)
-
-        Main Concept:
-            The one-body density matrix is computed as:
-                \gamma_{pq} = <\psi| c_p^\dagger c_q |\psi>
-            where c_p^\dagger and c_q are creation and annihilation operators.
-        """
+        dim = len(psi)
+        Phi_tensor = np.zeros((number_of_orbitals, number_of_orbitals, dim), dtype=np.complex128)
         rdm1 = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
-        for p in range(number_of_orbitals):
-            for q in range(number_of_orbitals):
-                op = FermionOperator(f"{p}^ {q}")
-                mat = self._transform_hamiltonian_to_matrix(op, number_of_orbitals, number_of_electrons)
-                value = np.vdot(psi, mat @ psi)
-                rdm1[p, q] = value
-        return rdm1
-
-    def _get_two_body_density_matrix(self, psi: np.ndarray, number_of_orbitals: int, number_of_electrons=None) -> ndarray:
-        """
-        Compute the two-body density matrix from the eigenstate.
-
-        Args:
-            psi (ndarray): Dense ground-state vector.
-            number_of_orbitals (int): Number of spin-orbitals.
-
-        Returns:
-            ndarray: 2-RDM of shape (n, n, n, n)
-
-        Main Concept:
-            The two-body density matrix is computed as:
-                \Gamma_{pqrs} = <\psi| c_p^\dagger c_q^\dagger c_s c_r |\psi>
-            where c_p^\dagger, c_q^\dagger, c_s, and c_r are creation and annihilation operators.
-        """
-        rdm2 = np.zeros((number_of_orbitals, number_of_orbitals,
-                         number_of_orbitals, number_of_orbitals), dtype=np.complex128)
         
-        for k in range(number_of_orbitals):
-            for l in range(number_of_orbitals):
-                for m in range(number_of_orbitals):
-                    for n in range(number_of_orbitals):
-                        op = FermionOperator(f"{k}^ {m}^ {n} {l}")
-                        mat = self._transform_hamiltonian_to_matrix(op, number_of_orbitals, number_of_electrons)
-                        rdm2[k,l,m,n] = np.vdot(psi, mat @ psi)
-        return rdm2
+        # 建立單體激發中間態 (只需執行 N^2 次)
+        for i in range(number_of_orbitals):
+            for j in range(number_of_orbitals):
+                op = FermionOperator(f"{i}^ {j}")
+                mat = self._transform_hamiltonian_to_matrix(op, number_of_orbitals, number_of_electrons)
+                
+                phi_ij = mat @ psi
+                Phi_tensor[i, j, :] = phi_ij
+                rdm1[i, j] = np.vdot(psi, phi_ij)
+
+        # 核心加速：使用 einsum 一次性求出 2-RDM，消滅 O(N^4) 迴圈
+        term1 = np.einsum('lkx, mnx -> klmn', Phi_tensor.conj(), Phi_tensor)
+        delta_lm = np.eye(number_of_orbitals)
+        term2 = np.einsum('lm, kn -> klmn', delta_lm, rdm1)
+        
+        rdm2 = term1 - term2
+        return rdm1, rdm2
 
 
 if __name__ == "__main__":
