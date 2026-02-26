@@ -8,6 +8,7 @@ import time
 import concurrent.futures
 import threading
 from scipy.sparse import csc_array
+import math
 
 try:
     import cudaq
@@ -24,46 +25,67 @@ def ensure_real_coefficients(qubit_ham):
     return qubit_ham
 
 def make_ansatz(n_qubits, number_of_electrons=None, depth=1, mode='cudaq-vqe'):
+    # the gate design and ansatz pattern is coming from:
+    #https://arxiv.org/pdf/1904.10910,
+    # which is paricle-number-conserving ansatz for VQE.
     assert number_of_electrons is not None, "number_of_electrons must be provided"
     assert number_of_electrons <= n_qubits, "number_of_electrons must be less than or equal to n_qubits"
     assert number_of_electrons >= 0, "number_of_electrons must be non-negative"
-
+    
+    total_gates = math.comb(n_qubits,number_of_electrons)
+    
     @cudaq.kernel
     def kernel(params: list[float]):
         qubits = cudaq.qvector(n_qubits)
         for i in range(number_of_electrons):
-            x(qubits[i])
+            if 2*i < n_qubits:
+                x(qubits[2*i])
+            else:
+                if n_qubits % 2 == 0:
+                    x(qubits[(2*i+1)%n_qubits])
+                else:
+                    x(qubits[(2*i)%n_qubits])
+        
         param_idx = 0
-        for j in range(depth):
-            for k in range(n_qubits):
-                for i in range(n_qubits):
-                    if i > k:
-                        cx(qubits[(k) % n_qubits], qubits[i])
-                        rz(params[param_idx + 0], qubits[(k) % n_qubits])
-                        rz(np.pi, qubits[(k) % n_qubits])
-                        ry(params[param_idx + 1], qubits[(k) % n_qubits])
-                        ry(np.pi / 2, qubits[(k) % n_qubits])
-                        cx(qubits[i], qubits[(k) % n_qubits])
-                        ry(-np.pi / 2, qubits[(k) % n_qubits])
-                        ry(-params[param_idx + 1], qubits[(k) % n_qubits])
-                        rz(-np.pi, qubits[(k) % n_qubits])
-                        rz(-params[param_idx + 0], qubits[(k) % n_qubits])
-                        cx(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
-                        cz(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
-                        param_idx += 2
-    num_params = n_qubits * (n_qubits - 1) * depth
-
-    @cudaq.kernel
-    def kernel_no_params():
-        qubits = cudaq.qvector(n_qubits)
-        for i in range(number_of_electrons):
-            x(qubits[i])
-
-    if mode in ['classical', 'cudaq-vqe', 'cudaqx-vqe']:
-        kernel_r = kernel
-    else:
-        kernel_r = kernel_no_params
-    return kernel_r, num_params
+        i = 0
+        even_start = True
+        num_layers = 0
+        while True:
+            k = i +1 
+            if k < n_qubits:
+                cx(qubits[(k) % n_qubits], qubits[i])
+                rz(params[param_idx + 0], qubits[(k) % n_qubits])
+                rz(np.pi, qubits[(k) % n_qubits])
+                ry(params[param_idx + 1], qubits[(k) % n_qubits])
+                ry(np.pi / 2, qubits[(k) % n_qubits])
+                cx(qubits[i], qubits[(k) % n_qubits])
+                ry(-np.pi / 2, qubits[(k) % n_qubits])
+                ry(-params[param_idx + 1], qubits[(k) % n_qubits])
+                rz(-np.pi, qubits[(k) % n_qubits])
+                rz(-params[param_idx + 0], qubits[(k) % n_qubits])
+                cx(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
+                cz(qubits[(k) % n_qubits], qubits[(i) % n_qubits])
+                param_idx += 2
+            i = k+1
+            if i >= n_qubits:
+                num_layers += 1
+                if param_idx >= total_gates * depth * 2 and num_layers % 2 == 0:
+                    break
+                if even_start:
+                    i = 1
+                    even_start = False
+                elif not even_start:
+                    i = 0
+                    even_start = True
+                    
+    target_params = depth * math.comb(n_qubits, number_of_electrons) * 2
+    params_per_layer_pair = 2 * (n_qubits - 1)
+    # 3. Round n_params UP to the nearest full layer pair.
+    n_params = 0
+    n_layers = target_params//params_per_layer_pair if target_params % params_per_layer_pair == 0 else target_params//params_per_layer_pair + 1
+    n_params = n_layers * params_per_layer_pair
+        
+    return kernel, n_params
 
 def get_rdm(kernel, opt_params, number_of_orbitals, simulate_options, i=0, num_qpus=1, N=None):
     if simulate_options.get("async_observe", False):
