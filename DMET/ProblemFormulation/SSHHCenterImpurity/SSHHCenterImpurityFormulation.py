@@ -1,90 +1,68 @@
 from openfermion import FermionOperator
 import numpy as np
-from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
-# from DMET.ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
-class OneBodySSHHFormulation(OneBodyProblemFormulation):
-    def __init__(self, N_cells, t1, t2 , U, number_of_electrons, PBC):
+# from ..ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+from DMET.ProblemFormulation.ProblemFormulation import OneBodyProblemFormulation, ManyBodyProblemFormulation
+class OneBodyCenterImpuritySSHHFormulation(OneBodyProblemFormulation):
+    def __init__(self, N_cells, t1, t2 , U, number_of_electrons):
         """
-        Initialize the one-body Hubbard formulation.
-
+        Model A: 中心雜質 SSH-Hubbard 模型 (One-body)
+        
         Args:
-            L (int): The number of lattice sites.
-            t1 (float): Hopping parameter for even number of sites. (0->1 in same lattice)
-            t2 (float): Hopping parameter for odd number of sites. (1->2 in different lattice)
-            number_of_electrons (int): The number of electrons in the system.
-
-        Attributes:
-            L (int): Number of lattice sites.
-            t1 (float): Hopping parameter for even number of sites. (0->1 in same lattice)
-            t2 (float): Hopping parameter for odd number of sites. (1->2 in different lattice)
-            number_of_electrons (int): Number of electrons in the system.
-            H (FermionOperator): The one-body Hamiltonian.
-            _wavefunction (np.ndarray): The wavefunction of the system.
+            N_cells (int): 單元數。總格點 L 會被設定為 2 * N_cells + 1。
+            t1 (float): 弱跳躍參數 (在輻射邏輯中交替出現)。
+            t2 (float): 強跳躍參數 (中心雜質區強制使用)。
+            number_of_electrons (int): 系統電子數。
         """
         super().__init__()
         self.N_cells = N_cells
         self.t1 = t1
         self.t2 = t2
-        self.PBC = PBC
-        self._wavefunction = None
-        self.H = self.get_hamiltonian()
-        self.number_of_electrons = number_of_electrons
         self.U = U
-        if not hasattr(self, 'pointer_high_odd'):
-            self.pointer_high_odd = 1
-        if not hasattr(self, 'pointer_high_even'):
-            self.pointer_high_even = 0
-        if not hasattr(self, 'pointer_low'):
-            self.pointer_low = 0
+        self.number_of_electrons = number_of_electrons
+        
+        # 核心修改：L 為奇數，確保有一個中心格點 (Impurity Site)
+        self.L = 2 * N_cells + 1 
+        self._wavefunction = None
+
+
+        # 延用指標邏輯
+        self.pointer_high_odd = 1
+        self.pointer_high_even = 0
+        self.pointer_low = 0
+        
+        self.H = self.get_hamiltonian()
 
     def get_hamiltonian(self):
         """
-        Construct the one-body Hamiltonian for the SSH-Hubbard model.
-
-        Returns:
-            FermionOperator: The one-body Hamiltonian.
-
-        Main Concept:
-            The Hamiltonian is constructed as:
-                H = - \sum_{<i,j>,\sigma} (t1 * c_i^\dagger c_j + t2 * c_j^\dagger c_i)
-            where <i,j> denotes nearest neighbors and \sigma is the spin index.
+        建立以中心為原點對稱輻射的 SSH-Hubbard One-body Hamiltonian。
+        [site0_up, site0_dn, site1_up, site1_dn, ...]
         """
-
-        """
-    One-body Hamiltonian with flat index ordering:
-    [site0_up, site0_dn, site1_up, site1_dn, ..., siteL-1_up, siteL-1_dn]
-    """
-        L = 2 * self.N_cells  # total sites
-        dim = 2 * L  # total orbitals (sites * spins)
-
+        L = self.L
+        dim = 2 * L
         H = np.zeros((dim, dim), dtype=complex)
+        mid = L // 2  # 中心雜質格點索引 (例如 L=5, mid=2)
 
         for i in range(L):
+            j = (i + 1) 
+            if j >= L: break 
 
-            if self.PBC == True:
-                j = (i + 1) % L
+            # --- 修改鍵結邏輯：中心對稱 ---
+            # 當鍵結連接 (mid-1, mid) 或 (mid, mid+1) 時，設為 t2 (強鍵)
+            if i == mid - 1 or i == mid:
+                t = self.t2
             else:
-                j = (i + 1) 
-                if j >= L:
-                    break 
+                # 向外輻射：距離中心為偶數距離者為 t2，奇數者為 t1
+                dist = i - mid if i > mid else (mid - 1) - i
+                t = self.t2 if dist % 2 == 0 else self.t1
 
-            t = self.t1 if i % 2 == 0 else self.t2
-
-            # spin up (spin=0)
-            p_up = 2 * i + 0
-            q_up = 2 * j + 0
-            H[p_up, q_up] = -t
-            H[q_up, p_up] = -t
-
-            # spin down (spin=1)
-            p_dn = 2 * i + 1
-            q_dn = 2 * j + 1
-            H[p_dn, q_dn] = -t
-            H[q_dn, p_dn] = -t
+            # Spin up (0) & Spin down (1)
+            for spin in [0, 1]:
+                p = 2 * i + spin
+                q = 2 * j + spin
+                H[p, q] = -t
+                H[q, p] = -t
 
         return H
-    
-    
     
     def get_slater(self, number_of_electrons):
         """
@@ -251,69 +229,47 @@ class OneBodySSHHFormulation(OneBodyProblemFormulation):
         rdm_weak = np.dot(self._wavefunction_weak, self._wavefunction_weak.conjugate().T)
         # Final 1-RDM
         return rdm_weak 
-
-class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
-    def __init__(self, N_cells, t1, t2, U, PBC):
-        """
-        Initialize the many-body SSH-Hubbard formulation.
-
-        Args:
-            N_cells (int): Number of unit cells (each cell has 2 sites).
-            t1 (float): Hopping parameter for even bonds (intra-cell hopping).
-            t2 (float): Hopping parameter for odd bonds (inter-cell hopping).
-            U (float): On-site Coulomb interaction.
-
-        Attributes:
-            L (int): Total number of sites = 2 * N_cells.
-            dim (int): Total number of orbitals (including spin).
-            H (FermionOperator): Many-body Hamiltonian.
-            onebody_terms (np.ndarray): One-body hopping matrix.
-            twobody_terms (np.ndarray): Two-body interaction tensor.
-        """
+    
+    
+class ManyBodyCenterImpuritySSHHFormulation(ManyBodyProblemFormulation):
+    def __init__(self, N_cells, t1, t2, U):
         super().__init__()
         self.N_cells = N_cells
-        self.L = 2 * N_cells  # total number of sites
+        self.L = 2 * N_cells + 1 # 總格點數
         self.t1 = t1
         self.t2 = t2
         self.U = U
-        self.PBC = PBC
         self.H, self.onebody_terms, self.twobody_terms = self.get_hamiltonian()
 
     def get_hamiltonian(self):
-        """
-        Construct the many-body Hamiltonian for SSH-Hubbard model.
-
-        Returns:
-            Tuple[FermionOperator, np.ndarray, np.ndarray]:
-                - H: FermionOperator representing the Hamiltonian.
-                - onebody_terms: (2L x 2L) hopping matrix.
-                - twobody_terms: (2L x 2L x 2L x 2L) interaction tensor.
-        """
-        dim = 2 * self.L  # include spin
+        dim = 2 * self.L
         H = FermionOperator()
         onebody_terms = np.zeros((dim, dim), dtype=float)
         twobody_terms = np.zeros((dim, dim, dim, dim), dtype=float)
+        mid = self.L // 2
 
-        # Hopping terms
+        # Hopping terms (同步 Model A 的對稱邏輯)
         for i in range(self.L):
-            if self.PBC == True:
-                j = (i + 1) % self.L
+
+            j = (i + 1)
+            if j >= self.L: break 
+        
+            # 中心強耦合對稱
+            if i == mid - 1 or i == mid:
+                t = self.t2
             else:
-                j = (i + 1) 
-                if j >= self.L:
-                    break 
-            t = self.t1 if i % 2 == 0 else self.t2
+                dist = i - mid if i > mid else (mid - 1) - i
+                t = self.t2 if dist % 2 == 0 else self.t1
+                
             for spin in (0, 1):
-                p = 2 * i + spin
-                q = 2 * j + spin
+                p, q = 2 * i + spin, 2 * j + spin
                 H += -t * FermionOperator(f"{p}^ {q}") + -t * FermionOperator(f"{q}^ {p}")
                 onebody_terms[p, q] = -t
                 onebody_terms[q, p] = -t
 
         # On-site U terms
         for i in range(self.L):
-            p = 2 * i     # spin up
-            q = 2 * i + 1 # spin down
+            p, q = 2 * i, 2 * i + 1
             H += self.U * FermionOperator(f"{p}^ {q}^ {q} {p}")
             twobody_terms[p, p, q, q] = self.U
 
@@ -321,14 +277,14 @@ class ManyBodySSHHFormulation(ManyBodyProblemFormulation):
 
 if __name__=="__main__":
     # --- 系統參數 ---
-    N_cells = 2      # 四個格點
-    t1 = 1.0            # SSH 模型 t1 hopping
-    t2 = 0.5            # SSH 模型 t2 hopping
+    N_cells = 3      # 四個格點
+    t1 = 0.5           # SSH 模型 t1 hopping
+    t2 = 1.5            # SSH 模型 t2 hopping
     U = 4          # On-site interaction
     number_of_electrons = 6
 
     # --- One-body problem ---
-    onebody = OneBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U = U,number_of_electrons=number_of_electrons, PBC = True)
+    onebody = OneBodyCenterImpuritySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U = U,number_of_electrons=number_of_electrons)
     H = onebody.get_hamiltonian()
     print("H:", H.real)
     e_ground, wavefunction = onebody.get_slater(number_of_electrons)
@@ -339,7 +295,7 @@ if __name__=="__main__":
     print("Density Matrix:\n", density_matrix.round(3))
 
     # --- Many-body problem ---
-    manybody = ManyBodySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U=U, PBC = True)
+    manybody = ManyBodyCenterImpuritySSHHFormulation(N_cells=N_cells, t1=t1, t2=t2, U=U)
     H_manybody = manybody.H
 
     print("\n=== Many-body SSH-Hubbard Hamiltonian (terms count) ===")

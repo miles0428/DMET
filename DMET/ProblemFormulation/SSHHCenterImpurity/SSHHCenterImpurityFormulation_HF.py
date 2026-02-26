@@ -1,21 +1,22 @@
 from openfermion import FermionOperator
 import numpy as np
 try:
-    # from .SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
-    from .SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
+    # from .SSHHCenterImpurityFormulation import OneBodyCenterImpuritySSHHFormulation, ManyBodyCenterImpuritySSHHFormulation
+    from .SSHHCenterImpurityFormulation import OneBodyCenterImpuritySSHHFormulation, ManyBodyCenterImpuritySSHHFormulation
 except ImportError:
-    from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
+    from DMET.ProblemFormulation.SSHHCenterImpurity.SSHHCenterImpurityFormulation import OneBodyCenterImpuritySSHHFormulation, ManyBodyCenterImpuritySSHHFormulation
 
-class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, **kwargs):
-        super().__init__(N_cells, t1, t2, U, number_of_electrons, PBC)
+class OneBodyCenterImpuritySSHHFormulation_HF(OneBodyCenterImpuritySSHHFormulation):
+    def __init__(self, N_cells, t1, t2, U, number_of_electrons, alpha=0, tol=1e-8, max_iter=10000, **kwargs):
+        super().__init__(N_cells, t1, t2, U, number_of_electrons)
         self.U = U
         self.tol = tol
         self.max_iter = max_iter
         self.density_matrix = None
+        self.modelname = f"SSHHCenterImpurity_HF_{N_cells}_cells_t1_{t1}_t2_{t2}_U_{U}_nelec_{number_of_electrons}"
 
     def run_hf(self, alpha = 0.1):
-        L = 2 * self.N_cells
+        L = self.L
         dim = 2 * L
         H0 = self.get_hamiltonian()
 
@@ -77,50 +78,49 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
     #     return self._wavefunction
 
 
-class ManyBodySSHHFormulation_HF(ManyBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, PBC):
+class ManyBodyCenterImpuritySSHHFormulation_HF(ManyBodyCenterImpuritySSHHFormulation):
+    def __init__(self, N_cells, t1, t2, U):
         """
-        Initialize the many-body SSH-Hubbard formulation.
+        Initialize the many-body center impurity SSH-Hubbard formulation.
 
         Args:
-            N_cells (int): Number of unit cells (each cell has 2 sites).
-            t1 (float): Hopping parameter for even bonds (intra-cell hopping).
-            t2 (float): Hopping parameter for odd bonds (inter-cell hopping).
+            N_cells (int): Number of unit cells (each cell has 2 sites, plus 1 center site).
+            t1 (float): Hopping parameter for weak bonds.
+            t2 (float): Hopping parameter for strong bonds (center bonds).
             U (float): On-site Coulomb interaction.
 
         Attributes:
-            L (int): Total number of sites = 2 * N_cells.
+            L (int): Total number of sites = 2 * N_cells + 1.
             dim (int): Total number of orbitals (including spin).
             H (FermionOperator): Many-body Hamiltonian.
             onebody_terms (np.ndarray): One-body hopping matrix.
             twobody_terms (np.ndarray): Two-body interaction tensor.
         """
-        super().__init__(N_cells=N_cells, t1=t1, t2=t2, U=U, PBC=PBC)
+        super().__init__(N_cells=N_cells, t1=t1, t2=t2, U=U)
 
 
 if __name__=="__main__":
     # --- 系統參數 ---
-    N_cells = 10         # 四個格點
-    t1 = 1.0            # SSH 模型 t1 hopping
-    t2 = 0.5            # SSH 模型 t2 hopping
-    U = 1             # On-site interaction
-    number_of_electrons = 4
+    N_cells = 3         # 三個單元，總共 2*3+1=7 個格點
+    t1 = 0.5            # SSH 模型 t1 hopping
+    t2 = 1.5            # SSH 模型 t2 hopping
+    U = 10             # On-site interaction
+    number_of_electrons = 6
 
     # --- One-body problem ---
-    onebody = OneBodySSHHFormulation_HF(N_cells=N_cells, t1=t1, t2=t2, number_of_electrons=number_of_electrons, PBC = True, U=U)
+    onebody = OneBodyCenterImpuritySSHHFormulation_HF(N_cells=N_cells, t1=t1, t2=t2, number_of_electrons=number_of_electrons, U=U)
     H = onebody.get_hamiltonian()
     print("H:", H.real)
-    wavefunction = onebody.get_slater()
     density_matrix = onebody.get_density_matrix()
 
-    print("\n=== One-body SSH Hamiltonian ===")
+    print("\n=== One-body Center Impurity SSH Hamiltonian ===")
     print("Density Matrix:\n", density_matrix)
 
     # --- Many-body problem ---
-    manybody = ManyBodySSHHFormulation_HF(N_cells=N_cells, t1=t1, t2=t2, U=U, PBC = True)
+    manybody = ManyBodyCenterImpuritySSHHFormulation_HF(N_cells=N_cells, t1=t1, t2=t2, U=U)
     H_manybody = manybody.H
 
-    print("\n=== Many-body SSH-Hubbard Hamiltonian (terms count) ===")
+    print("\n=== Many-body Center Impurity SSH-Hubbard Hamiltonian (terms count) ===")
     print("Number of terms in FermionOperator:", len(H_manybody.terms))
 
     # --- 驗證 onebody_terms vs H ---
@@ -130,6 +130,7 @@ if __name__=="__main__":
     # --- 驗證兩體項 ---
     nonzero_twobody = np.nonzero(manybody.twobody_terms)
     print("\nNon-zero twobody terms indices:", list(zip(*nonzero_twobody)))
+    hf_energy = onebody.run_hf()
 
     
         
