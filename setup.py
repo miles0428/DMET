@@ -1,3 +1,4 @@
+import os
 from setuptools import setup, find_packages
 from setuptools.command.test import test as TestCommand
 import sys
@@ -18,23 +19,28 @@ class PyTest(TestCommand):
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
+install_requires = [
+    "numpy",
+    "scipy >= 1.15.0",
+    "openfermion",
+    "tqdm",
+    "filelock",
+    "joblib",
+    "h5py",
+    "openfermionpyscf",
+    "pyscf >= 2.9.0",
+]
+if os.environ.get("DMET_ENABLE_NV_GPU", "0").lower() in ("1", "true", "yes"):
+    install_requires.extend([
+        "cudaq",
+        "cudaq_solvers",
+    ])
+
 setup(
     name="DMET-nolab",
     version="0.2.36",
     packages=find_packages(),  # Automatically find all packages
-    install_requires=[
-        "numpy",
-        "scipy >= 1.15.0",
-        "openfermion",
-        "tqdm",
-        "filelock",
-        "joblib",
-        "h5py",
-        "openfermionpyscf",
-        "pyscf >= 2.9.0",
-        "cudaq",           # 若未啟用可註解
-        "cudaq_solvers",   # 若未啟用可註解
-    ],
+    install_requires=install_requires,
     entry_points={
         "console_scripts": [
             "dmet-hubbard=DMET.DMET:main"
