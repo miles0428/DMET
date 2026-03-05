@@ -21,7 +21,7 @@ class PyTest(TestCommand):
 
 install_requires = [
     "numpy",
-    "scipy >= 1.10.1",
+    "scipy >= 1.15.0",
     "openfermion",
     "tqdm",
     "filelock",
