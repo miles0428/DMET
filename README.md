@@ -17,7 +17,7 @@ cd DMET
 pip install .
 ```
 
-If you have CUDA GPU support and want the quantum solvers, set `DMET_ENABLE_QUANTUM=1` before running `pip install .` so that the `cudaq`/`cudaq_solvers` dependencies are included. Leave the variable unset on CPU-only systems to avoid trying to install the CUDA toolchain.
+If you have CUDA GPU support and want the quantum solvers, set `DMET_ENABLE_NV_GPU=1` before running `pip install .` so that the `cudaq`/`cudaq_solvers` dependencies are included. Leave the variable unset on CPU-only systems to avoid trying to install the CUDA toolchain.
 
 ## Getting Started
 

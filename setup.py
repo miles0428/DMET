@@ -30,7 +30,7 @@ install_requires = [
     "openfermionpyscf",
     "pyscf >= 2.9.0",
 ]
-if os.environ.get("DMET_ENABLE_QUANTUM", "0").lower() in ("1", "true", "yes"):
+if os.environ.get("DMET_ENABLE_NV_GPU", "0").lower() in ("1", "true", "yes"):
     install_requires.extend([
         "cudaq",
         "cudaq_solvers",
