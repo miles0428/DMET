@@ -42,7 +42,7 @@ setup(
     version="0.2.36",
     packages=find_packages(),  # Automatically find all packages
     install_requires=install_requires,
-    extras_require=extras_require,
+    # extras_require=extras_require,
     entry_points={
         "console_scripts": [
             "dmet-hubbard=DMET.DMET:main"
