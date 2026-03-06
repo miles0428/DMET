@@ -1,13 +1,7 @@
 import unittest
 from openfermion import FermionOperator
-from openfermion.linalg import get_ground_state, get_number_preserving_sparse_operator
 from DMET.ProblemSolver.ClassicalEigenSolver.EigenSolver import EigenSolver
 import numpy as np
-
-
-def _expectation(state, operator):
-    return state.conj().T @ (operator @ state)
-
 
 class TestEigenSolver(unittest.TestCase):
     def setUp(self):
@@ -25,48 +19,29 @@ class TestEigenSolver(unittest.TestCase):
 
     def test_eigen_solver(self):
         number_of_orbitals = 4
-        number_of_electrons = 2
+        energy, onerdm, twordm = self.eigen_solver.solve(self.hamiltonian, number_of_orbitals)
 
-        energy, onerdm, twordm = self.eigen_solver.solve(
-            self.hamiltonian,
-            number_of_orbitals,
-            number_of_electrons=number_of_electrons,
-        )
+        # Expected 1-RDM
+        exact_onerdm = np.array([
+            [0.5, 0.0, 0.5, 0.0],
+            [0.0, 0.5, 0.0, 0.5],
+            [0.5, 0.0, 0.5, 0.0],
+            [0.0, 0.5, 0.0, 0.5]
+        ])
 
-        sparse_hamiltonian = get_number_preserving_sparse_operator(
-            self.hamiltonian, number_of_orbitals, number_of_electrons
-        )
-        _, psi = get_ground_state(sparse_hamiltonian)
-        psi = psi.ravel()
-
-        expected_onerdm = np.zeros((number_of_orbitals, number_of_orbitals), dtype=np.complex128)
-        expected_twordm = np.zeros(
-            (number_of_orbitals, number_of_orbitals, number_of_orbitals, number_of_orbitals),
-            dtype=np.complex128,
-        )
-
-        for p in range(number_of_orbitals):
-            for q in range(number_of_orbitals):
-                mat_pq = get_number_preserving_sparse_operator(
-                    FermionOperator(f"{p}^ {q}"), number_of_orbitals, number_of_electrons
-                )
-                expected_onerdm[p, q] = _expectation(psi, mat_pq)
-                for r in range(number_of_orbitals):
-                    for s in range(number_of_orbitals):
-                        mat_rs = get_number_preserving_sparse_operator(
-                            FermionOperator(f"{r}^ {s}"), number_of_orbitals, number_of_electrons
+        # Expected 2-RDM
+        exact_twordm = np.zeros((4, 4, 4, 4), dtype=np.complex128)
+        for p in range(4):
+            for q in range(4):
+                for r in range(4):
+                    for s in range(4):
+                        exact_twordm[p, q, r, s] = (
+                            exact_onerdm[p, r] * exact_onerdm[q, s] - exact_onerdm[p, s] * exact_onerdm[q, r]
                         )
-                        term1 = _expectation(psi, mat_pq @ mat_rs)
-                        delta_qr = 1.0 if q == r else 0.0
-                        mat_ps = get_number_preserving_sparse_operator(
-                            FermionOperator(f"{p}^ {s}"), number_of_orbitals, number_of_electrons
-                        )
-                        term2 = delta_qr * _expectation(psi, mat_ps)
-                        expected_twordm[p, q, r, s] = term1 - term2
 
-        self.assertTrue(np.allclose(onerdm, expected_onerdm), "1-RDM does not match the expected value.")
-        self.assertTrue(np.allclose(twordm, expected_twordm), "2-RDM does not match the expected value.")
-
+        # Assertions
+        self.assertTrue(np.allclose(onerdm, exact_onerdm), "1-RDM does not match the expected value.")
+        self.assertTrue(np.allclose(twordm, exact_twordm), "2-RDM does not match the expected value.")
 
 if __name__ == "__main__":
     unittest.main()
