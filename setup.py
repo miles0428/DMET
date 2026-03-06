@@ -30,11 +30,12 @@ install_requires = [
     "openfermionpyscf",
     "pyscf >= 2.9.0",
 ]
-# Optional GPU extras: user should pick the cupy variant matching system CUDA
+
 if os.environ.get("DMET_ENABLE_NV_GPU", "0").lower() in ("1", "true", "yes"):
     install_requires.extend([
         "cudaq",
         "cudaq_solvers",
+        "cupy"
     ])
 
 setup(
@@ -42,13 +43,12 @@ setup(
     version="0.2.36",
     packages=find_packages(),  # Automatically find all packages
     install_requires=install_requires,
-    # extras_require=extras_require,
     entry_points={
         "console_scripts": [
             "dmet-hubbard=DMET.DMET:main"
         ]
     },
-    author="Yu-Cheng Chung",
+    author="Yu-Cheng Chung & Ssu-Yi Chen",
     description="A DMET implementation for the Hubbard model.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
