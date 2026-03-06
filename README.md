@@ -5,21 +5,27 @@ DMET (Density Matrix Embedding Theory) is a quantum embedding method for solving
 
 ## Installation
 
-### Options
+### Install directly from GitHub (no local clone needed)
 
-- **Install directly from GitHub** (no local clone needed):
+- **CPU-only install (default)**
   ```bash
   pip install git+https://github.com/miles0428/DMET.git
   ```
-- **Clone and install locally** (recommended when developing or tweaking the code):
+- **GPU-enabled install (requires `DMET_ENABLE_NV_GPU=1` and proper CUDA/CuPy setup)**
   ```bash
-  git clone https://github.com/miles0428/DMET.git
-  cd DMET
+  DMET_ENABLE_NV_GPU=1 pip install git+https://github.com/miles0428/DMET.git
   ```
 
-### Installation commands
+Setting `DMET_ENABLE_NV_GPU=1` before installation ensures that the optional `cudaq` / `cudaq_solvers` dependencies are pulled in. Leave the variable unset on machines without CUDA tooling to avoid pulling GPU packages.
 
-- **CPU-only install (default)**
+### Clone and install locally (recommended when developing or tweaking the code)
+
+```bash
+git clone https://github.com/miles0428/DMET.git
+cd DMET
+```
+
+- **CPU-only install (default for local source)**
   ```bash
   pip install .
   ```
@@ -27,8 +33,6 @@ DMET (Density Matrix Embedding Theory) is a quantum embedding method for solving
   ```bash
   DMET_ENABLE_NV_GPU=1 pip install .
   ```
-
-Setting `DMET_ENABLE_NV_GPU=1` before installation ensures that the optional `cudaq` / `cudaq_solvers` dependencies are pulled in. Leave the variable unset on machines without CUDA tooling to avoid pulling GPU packages.
 
 ## Getting Started
 
