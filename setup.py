@@ -30,6 +30,13 @@ install_requires = [
     "openfermionpyscf",
     "pyscf >= 2.9.0",
 ]
+# Optional GPU extras: user should pick the cupy variant matching system CUDA
+extras_require = {
+    # Allow `pip install .[gpu]` to pull GPU helper (pip will pick compatible cupy wheel)
+    "gpu": [
+        "cupy",
+    ]
+}
 if os.environ.get("DMET_ENABLE_NV_GPU", "0").lower() in ("1", "true", "yes"):
     install_requires.extend([
         "cudaq",
@@ -41,6 +48,7 @@ setup(
     version="0.2.36",
     packages=find_packages(),  # Automatically find all packages
     install_requires=install_requires,
+    extras_require=extras_require,
     entry_points={
         "console_scripts": [
             "dmet-hubbard=DMET.DMET:main"
