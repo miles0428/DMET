@@ -1,3 +1,4 @@
+from __future__ import annotations
 from DMET.ProblemSolver import ProblemSolver
 from openfermion import FermionOperator
 from openfermion.linalg import get_ground_state, get_sparse_operator, get_number_preserving_sparse_operator
