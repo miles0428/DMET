@@ -43,3 +43,7 @@ __pycache__/
 
 # local logs
 *.log
+
+# Test outputs
+fortest/
+experiments/
