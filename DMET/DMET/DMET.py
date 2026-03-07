@@ -231,7 +231,8 @@ class DMET:
         energy, onebody_rdm, twobody_rdm= self.problem_solver.solve(embedded_hamiltonian, number_of_orbitals=number_of_orbitals, number_of_electrons=fragment_hamiltonian.number_of_electrons)
         # print(onebody_rdm.round(5).real)
         fragment_energy = self.get_fragment_energy(fragment_hamiltonian, onebody_rdm, twobody_rdm, fragment_length)
-        print(f"Fragment energy: {fragment_energy}")
+        if self.kwargs.get('verbose', 0) >= 2:
+            print(f"Fragment energy: {fragment_energy}")
         return fragment_energy, onebody_rdm, twobody_rdm
 
     def singleshot(self, mu: float) -> Tuple[float, float]:
