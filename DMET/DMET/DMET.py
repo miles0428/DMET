@@ -44,6 +44,10 @@ class DMET:
         self.fragments = fragments  # list of fragment indices
         self.problem_solver = problem_solver  # instance of ProblemSolver
         self.onebodyrdm = self.one_body_problem_formulation.get_density_matrix()
+        # Check idempotency of one-body RDM: D should satisfy D² = D
+        diff = np.real(self.onebodyrdm @ self.onebodyrdm - self.onebodyrdm)
+        is_idempotent = np.allclose(diff, 0, atol=1e-3)
+        assert is_idempotent, f"One-body RDM is not idempotent! ||D² - D||_max = {np.max(np.abs(diff))}"
         self.kwargs = kwargs
         # verbose mode
         # verbose level, supports True/False and also 0/1/2
