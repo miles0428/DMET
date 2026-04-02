@@ -40,7 +40,7 @@ if os.environ.get("DMET_ENABLE_NV_GPU", "0").lower() in ("1", "true", "yes"):
 
 setup(
     name="DMET-nolab",
-    version="0.2.36",
+    version="0.3.01",
     packages=find_packages(),  # Automatically find all packages
     install_requires=install_requires,
     entry_points={
