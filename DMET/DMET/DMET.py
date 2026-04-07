@@ -548,31 +548,39 @@ class DMET:
             high_level_rdm: (N_tot × N_tot) Hermitian matrix in original basis
 
         Math:
-            For each fragment x:
-                D_contrib^(x) = P^(x) @ D_frag^(x) @ P^(x)^dagger
-            Then use reorder_idxs to place each contribution in the correct position
-            of the full matrix.
+            For each fragment:
+                1. D_contrib = P @ D_frag @ P^\dagger (in reordered basis)
+                2. Inverse reorder to original basis
+                3. Extract fragment-specific rows
+                4. Place at correct position in D_hl_raw
         """
         N_tot = projectors[0].shape[0]  # total spin-orbitals
+        L_A = fragment_rdms[0].shape[0] // 2  # fragment size per fragment
+        
         D_hl_raw = np.zeros((N_tot, N_tot), dtype=complex)
         
         # Get reorder_idxs for each fragment
         reorder_idxs = self.current_reorder_idxs
         
         for rdm, projector, reorder_idx in zip(fragment_rdms, projectors, reorder_idxs):
-            # projector shape: (N_tot, 2L_A)
-            # rdm shape: (2L_A, 2L_A)
-            # reorder_idx: indices mapping from fragment basis to full basis
-            
-            # D_full = P @ rdm @ P^dagger (in reordered basis)
+            # D_contrib = P @ D @ P^\dagger (in reordered basis)
             D_contrib = projector @ rdm @ projector.conj().T
             
-            # Place D_contrib into correct position using reorder_idx
-            # D_hl[reorder_idx, reorder_idx] += D_contrib
-            D_hl_raw[np.ix_(reorder_idx, reorder_idx)] += D_contrib
+            # Inverse reorder: 回到 original basis
+            inv_reorder_idx = np.empty_like(reorder_idx)
+            inv_reorder_idx[reorder_idx] = np.arange(len(reorder_idx))
+            D_original = D_contrib[np.ix_(inv_reorder_idx, inv_reorder_idx)]
+            
+            # 取 fragment 特定位置 (reorder_idx 的前 L_A 個元素)
+            fragment_indices = reorder_idx[:L_A]
+            D = D_original[fragment_indices, :]  # shape (L_A × N_tot)
+            
+            # 直接寫入對應的 rows（所有 columns）
+            D_hl_raw[fragment_indices, :] = D
         
         # Hermitian symmetrization
         D_hl = 0.5 * (D_hl_raw + D_hl_raw.conj().T)
+        return D_hl
         return D_hl
 
     def run(self, mu0: Optional[float] = None, mu1: Optional[float] = None, singleshot: bool = False, filenameprefix: str = 'filename') -> float:
