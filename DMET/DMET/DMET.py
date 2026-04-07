@@ -545,25 +545,33 @@ class DMET:
             projectors: List of projector matrices (N_tot × 2L_A each)
 
         Returns:
-            high_level_rdm: (N_tot × N_tot) Hermitian matrix
+            high_level_rdm: (N_tot × N_tot) Hermitian matrix in original basis
 
         Math:
-            For each fragment: D_full^(x) = P^(x) @ 𝔇̃^(x) @ P^(x)^dagger
-            Then sum all fragment contributions (overlap regions get added)
+            For each fragment x:
+                D_contrib^(x) = P^(x) @ D_frag^(x) @ P^(x)^dagger
+            Then use reorder_idxs to place each contribution in the correct position
+            of the full matrix.
         """
         N_tot = projectors[0].shape[0]  # total spin-orbitals
         D_hl_raw = np.zeros((N_tot, N_tot), dtype=complex)
         
-        for rdm, projector in zip(fragment_rdms, projectors):
+        # Get reorder_idxs for each fragment
+        reorder_idxs = self.current_reorder_idxs
+        
+        for rdm, projector, reorder_idx in zip(fragment_rdms, projectors, reorder_idxs):
             # projector shape: (N_tot, 2L_A)
             # rdm shape: (2L_A, 2L_A)
+            # reorder_idx: indices mapping from fragment basis to full basis
             
-            # D_full = P @ rdm @ P^dagger
-            # shape: (N_tot, 2L_A) @ (2L_A, 2L_A) @ (2L_A, N_tot) = (N_tot, N_tot)
+            # D_full = P @ rdm @ P^dagger (in reordered basis)
             D_contrib = projector @ rdm @ projector.conj().T
-            D_hl_raw += D_contrib
+            
+            # Place D_contrib into correct position using reorder_idx
+            # D_hl[reorder_idx, reorder_idx] += D_contrib
+            D_hl_raw[np.ix_(reorder_idx, reorder_idx)] += D_contrib
         
-        # Hermitian symmetrization (in case of numerical errors)
+        # Hermitian symmetrization
         D_hl = 0.5 * (D_hl_raw + D_hl_raw.conj().T)
         return D_hl
 
