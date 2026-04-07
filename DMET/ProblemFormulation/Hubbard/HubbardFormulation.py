@@ -100,22 +100,32 @@ class OneBodyHubbardFormulation(OneBodyProblemFormulation):
             np.ndarray: The one-body reduced density matrix.
 
         Main Concept:
-            Use site-local basis for idempotent RDM (eigenvalues = 0 or 1).
-            For half-filling, put one electron at each site (alternating spin).
+            Use Hamiltonian → Exact Diagonalization → Ground state wavefunction → RDM
+            γ = ψ ψ† where ψ is the ground state Slater determinant.
         """
-        rdm = np.zeros((2 * self.L, 2 * self.L), dtype=float)
+        from scipy.linalg import eigh
         
-        # Fill electrons in site basis (idempotent)
-        # For Ne electrons in 2L orbitals: fill Ne/2 sites with one spin
-        # Alternative: fill site-localized states
-        electrons_per_site = self.number_of_electrons // self.L
+        # Build one-body Hamiltonian matrix
+        onebody_terms = np.zeros((2 * self.L, 2 * self.L))
+        for i in range(self.L):
+            j = (i + 1) % self.L
+            for spin in (0, 1):
+                p = 2 * i + spin
+                q = 2 * j + spin
+                onebody_terms[p, q] = -self.t
+                onebody_terms[q, p] = -self.t
         
-        for site in range(self.L):
-            for s in range(electrons_per_site):
-                orbital_idx = 2 * site + s
-                rdm[orbital_idx, orbital_idx] = 1.0
+        # Diagonalize one-body Hamiltonian
+        # H_onebody |φ_i⟩ = ε_i |φ_i⟩
+        eigvals, eigvecs = eigh(onebody_terms)
         
-        return rdm
+        # Fill lowest Ne orbitals (Slater determinant)
+        occupied_orbitals = eigvecs[:, :self.number_of_electrons]
+        
+        # RDM: γ = ψ ψ†
+        rdm = occupied_orbitals @ occupied_orbitals.conjugate().T
+        
+        return rdm.real.round(10)
 
 class ManyBodyHubbardFormulation(ManyBodyProblemFormulation):
     def __init__(self, L, t, U):
