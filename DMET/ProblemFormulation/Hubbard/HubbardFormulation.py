@@ -100,13 +100,32 @@ class OneBodyHubbardFormulation(OneBodyProblemFormulation):
             np.ndarray: The one-body reduced density matrix.
 
         Main Concept:
-            The density matrix is computed as:
-                \gamma = \psi \psi^\dagger
-            where \psi is the wavefunction.
+            Use Hamiltonian → Exact Diagonalization → Ground state wavefunction → RDM
+            γ = ψ ψ† where ψ is the ground state Slater determinant.
         """
-        if self._wavefunction is None:
-            _, self._wavefunction = self.get_analytic_solution(self.number_of_electrons)
-        return np.dot(self._wavefunction, self._wavefunction.conjugate().T).real.round(10)
+        from scipy.linalg import eigh
+        
+        # Build one-body Hamiltonian matrix
+        onebody_terms = np.zeros((2 * self.L, 2 * self.L))
+        for i in range(self.L):
+            j = (i + 1) % self.L
+            for spin in (0, 1):
+                p = 2 * i + spin
+                q = 2 * j + spin
+                onebody_terms[p, q] = -self.t
+                onebody_terms[q, p] = -self.t
+        
+        # Diagonalize one-body Hamiltonian
+        # H_onebody |φ_i⟩ = ε_i |φ_i⟩
+        eigvals, eigvecs = eigh(onebody_terms)
+        
+        # Fill lowest Ne orbitals (Slater determinant)
+        occupied_orbitals = eigvecs[:, :self.number_of_electrons]
+        
+        # RDM: γ = ψ ψ†
+        rdm = occupied_orbitals @ occupied_orbitals.conjugate().T
+        
+        return rdm.real.round(10)
 
 class ManyBodyHubbardFormulation(ManyBodyProblemFormulation):
     def __init__(self, L, t, U):
