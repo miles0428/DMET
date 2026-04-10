@@ -20,12 +20,12 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
         dim = 2 * L
         H0 = self.get_hamiltonian()
 
-        # Initialize density matrix
+        # Initialize density matrix: use provided, or self.initial_density, or non-interacting
         if initial_density is not None:
-            # Use provided initial density matrix
             D = initial_density.copy()
+        elif hasattr(self, 'initial_density') and self.initial_density is not None:
+            D = self.initial_density.copy()
         else:
-            # Initialize density matrix (non-interacting solution)
             eigenvals, eigenvecs = np.linalg.eigh(H0)
             idx = np.argsort(eigenvals)[:self.number_of_electrons]
             D = super().get_density_matrix()
