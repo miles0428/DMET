@@ -7,11 +7,12 @@ except ImportError:
     from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 
 class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, initial_density=None, **kwargs):
+    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, initial_density=None, hf_iter=2, **kwargs):
         super().__init__(N_cells, t1, t2, U, number_of_electrons, PBC)
         self.U = U
         self.tol = tol
         self.max_iter = max_iter
+        self.hf_iter = hf_iter  # Early stopping: run only N steps of HF
         self.density_matrix = None
         self.initial_density = initial_density
 
@@ -32,7 +33,7 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
             D = super().get_density_matrix()
         # print("Initial density matrix:\n", D)
 
-        for iteration in range(self.max_iter):
+        for iteration in range(self.hf_iter):
             # Build mean-field Hamiltonian
             H_mf = H0.copy()
             for i in range(L):
