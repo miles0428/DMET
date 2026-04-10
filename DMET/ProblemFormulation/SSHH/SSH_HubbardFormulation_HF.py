@@ -7,7 +7,7 @@ except ImportError:
     from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 
 class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, initial_density=None, hf_iter=2, **kwargs):
+    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, initial_density=None, hf_iter=10, **kwargs):
         super().__init__(N_cells, t1, t2, U, number_of_electrons, PBC)
         self.U = U
         self.tol = tol
