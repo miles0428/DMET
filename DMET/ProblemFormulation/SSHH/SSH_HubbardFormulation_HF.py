@@ -7,26 +7,32 @@ except ImportError:
     from DMET.ProblemFormulation.SSHH.SSH_HubbardFormulation import OneBodySSHHFormulation, ManyBodySSHHFormulation
 
 class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
-    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8, max_iter=10000, **kwargs):
+    def __init__(self, N_cells, t1, t2, U, number_of_electrons, PBC=True, alpha=0, tol=1e-8,  initial_density=None, hf_iter=10000, **kwargs):
         super().__init__(N_cells, t1, t2, U, number_of_electrons, PBC)
         self.U = U
         self.tol = tol
-        self.max_iter = max_iter
+        self.hf_iter = hf_iter  # Early stopping: run only N steps of HF
         self.density_matrix = None
+        self.initial_density = initial_density
 
-    def run_hf(self, alpha = 0.1):
+    def run_hf(self, alpha = 0.1, initial_density = None):
         L = 2 * self.N_cells
         dim = 2 * L
         H0 = self.get_hamiltonian()
 
-        # Initialize density matrix (non-interacting solution)
-        eigenvals, eigenvecs = np.linalg.eigh(H0)
-        idx = np.argsort(eigenvals)[:self.number_of_electrons]
-        # D = np.dot(eigenvecs[:, idx], eigenvecs[:, idx].conj().T)
-        D = super().get_density_matrix()
+        # Initialize density matrix
+        if initial_density is not None:
+            initial_density = np.asarray(initial_density)
+            if initial_density.shape != (dim, dim):
+                raise ValueError(f"initial_density shape {initial_density.shape} does not match expected ({dim}, {dim})")
+            D = initial_density.copy()
+        elif hasattr(self, 'initial_density') and self.initial_density is not None:
+            D = self.initial_density.copy()
+        else:
+            D = super().get_density_matrix()
         # print("Initial density matrix:\n", D)
 
-        for iteration in range(self.max_iter):
+        for iteration in range(self.hf_iter):
             # Build mean-field Hamiltonian
             H_mf = H0.copy()
             for i in range(L):
