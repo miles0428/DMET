@@ -22,12 +22,13 @@ class OneBodySSHHFormulation_HF(OneBodySSHHFormulation):
 
         # Initialize density matrix
         if initial_density is not None:
+            initial_density = np.asarray(initial_density)
+            if initial_density.shape != (dim, dim):
+                raise ValueError(f"initial_density shape {initial_density.shape} does not match expected ({dim}, {dim})")
             D = initial_density.copy()
         elif hasattr(self, 'initial_density') and self.initial_density is not None:
             D = self.initial_density.copy()
         else:
-            eigenvals, eigenvecs = np.linalg.eigh(H0)
-            idx = np.argsort(eigenvals)[:self.number_of_electrons]
             D = super().get_density_matrix()
         # print("Initial density matrix:\n", D)
 
